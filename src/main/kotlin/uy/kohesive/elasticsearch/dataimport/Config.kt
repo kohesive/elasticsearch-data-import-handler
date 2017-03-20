@@ -43,8 +43,8 @@ data class PrepStatement(val description: String, val sqlQuery: String)
 
 data class Importer(val description: String, val targetElasticsearch: EsTargetConnection, val statements: List<EsImportStatement>)
 data class EsTargetConnection(val nodes: List<String>,
-                        val basicAuth: AuthInfo? = null,
-                        val settings: Map<String, String>? = null)
+                              val basicAuth: AuthInfo? = null,
+                              val settings: Map<String, String>? = null)
 
 // sparkWriteSettings = mapOf("es.index.auto.create" to "true")
 data class EsImportStatement(val id: String, val description: String, val indexName: String, val type: String, val sqlQuery: String, val settings: Map<String, String>? = null)

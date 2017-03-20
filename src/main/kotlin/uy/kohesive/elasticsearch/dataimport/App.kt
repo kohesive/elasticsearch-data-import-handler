@@ -17,11 +17,9 @@ import java.net.URL
 import java.net.URLClassLoader
 import java.sql.Timestamp
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
-import java.time.temporal.TemporalUnit
 import java.util.*
 
 class App {
@@ -69,7 +67,7 @@ class App {
             }
         }.flatten().toMap()
 
-        val NOSTATE = LocalDateTime.of(1900,1,1,0,0,0,0).atZone(ZoneOffset.UTC).toInstant()
+        val NOSTATE = LocalDateTime.of(1900, 1, 1, 0, 0, 0, 0).atZone(ZoneOffset.UTC).toInstant()
 
         val lastRuns: Map<String, Instant> = cfg.importSteps.map { importStep ->
             importStep.statements.map { statement ->
@@ -224,13 +222,11 @@ class App {
                                 JavaEsSparkSQL.saveToEs(sqlResults, indexSpec(statement.indexName, statement.type), options)
                                 stateMgr.writeStateForStatement(uniqueId, statement.id, thisRunDate, "success", null)
                                 stateMgr.logStatement(uniqueId, statement.id, thisRunDate, "sucess", null)
-                            }
-                            catch (ex: Exception) {
+                            } catch (ex: Exception) {
                                 val msg = ex.message ?: "unknown failure"
                                 stateMgr.writeStateForStatement(uniqueId, statement.id, thisRunDate, "error", msg)
                                 stateMgr.logStatement(uniqueId, statement.id, thisRunDate, "error", msg)
-                            }
-                            finally {
+                            } finally {
                                 stateMgr.unlockStatemnt(uniqueId, statement.id)
                             }
                         }

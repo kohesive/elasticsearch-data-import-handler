@@ -32,19 +32,19 @@ The configuration file follows this format:
 }
 ```
 
-First you should provide 1 or more `sources`.  Each source becomes a temporary table in the unified catalog system from which you 
-can query.  
+First you should provide 1 or more `sources`.  Each source becomes a temporary table in a unified catalog of tables from 
+which you can query and join together.
 
-Optionally, you can include preparatory steps in `prepStatements`, usually these are additional derivative temporary tables 
-that may be shared by the later import processing.  The `prepStatements` execute in order and **do not** do any date range 
+Optionally, you can include preparatory steps in `prepStatements` which are usually additional  temporary tables 
+that may be shared by the later import steps.  The `prepStatements` execute in order and **do not** do any date range 
 substitution.
 
 Lastly you specify `importSteps` which are queries that use any of the `sources` and temporary tables created in 
-`prepStatements` that feed the results of each query into Elasticsearch.  These may be complex queries 
+`prepStatements`; where the results of each SQL query is pushed into an Elasticsearch index.  
 
 **Tip:** The SQL used is anything available to [Apache Spark SQL](https://docs.databricks.com/spark/latest/spark-sql/index.html)
 
-#### Let's start with an example, 
+### Let's start with an example, 
 ...of loading 1 table from MySQL into Elasticsearch:
 
 ```hocon
@@ -104,25 +104,28 @@ Lastly you specify `importSteps` which are queries that use any of the `sources`
 ```
 
 You will see that the JDBC source is provided, which must include the JDBC driver for the database, connection information,
-and a mapping from the original DB table name `sourceTable` to the temporary table that will be used in future queries
-`sparkTable`.  The name `sparkTable` is used because this system runs an embedded Apache Spark, and is creating Spark SQL
-tables from the configuration.  Since this runs in Apache Spark, there might be additional options you wish to set when 
-the data is loaded.  For advanced users who know what these are, you can add `settings` map at the the `jdbc` connection
-level to apply to all tables within that connection, or at the per-table level of the configuration.  
+and a mapping from the original `sourceTable` database table to the temporary table `sparkTable` that will be used in 
+later SQL queries.  The name `sparkTable` is used because this system runs an embedded Apache Spark, and is creating Spark SQL
+tables from the configuration.  
 
-The import steps are a collection of target Elasticsearch clusters and one or more SQL statements for each.  Each statement
+Since this process runs in Apache Spark, there might be additional options you wish to set when 
+the data is loaded.  For advanced users who know what these are, you can add `settings` map at the the `jdbc` connection
+level to apply to all tables within that connection, or at the per-`tables` level of the configuration to apply to only
+one table.  
+
+The `importSteps` are a collection of target Elasticsearch clusters and one or more SQL statements for each.  Each statement
 must have a unique `id` so that state can be tracked, changing or removing the `id` will result in a full data load running
 for a given query.  
 
 Notice that the SQL statement includes the use of the `{lastRun}` and `{thisRun}` macros.  These will substitute the current
-date/time (at granularity of SECONDS, and the local time zone of the data import process) into the SQL as a SQL Date formated
-string.  So be sure to put the dates inside quotes.
+date/time into the SQL as a SQL Date formated string.  The granularity is SECONDS, and the local time zone of the data 
+import processor is used.  Also, be sure to put the date macros inside quotes.
 
-The `type` field is the target type within `indexName` for the documents.  You can use either the literal type name, or
-include a macro of `{fieldName}` where `fieldName` is one of the fields in the SQL result set.  
+The `type` field is the target type within the Elasticsearch `indexName` for the documents.  You can use either the 
+literal type name, or include a macro of `{fieldName}` where `fieldName` is one of the fields in the SQL result set.  
 
-The `settings` object for Elasticsearch are important, and the most common basic settings you may wish to set at either 
-the connection or statement level are:
+The `settings` object for Elasticsearch are important, and the most common basic settings you may wish to set (at either 
+the connection or statement level) are:
 
 |Setting|Description|
 |-------|-----------|
@@ -132,7 +135,7 @@ the connection or statement level are:
 
 **Tip:** For advanced use cases, please see documentation for [Elasticsearch-Spark settings](https://www.elastic.co/guide/en/elasticsearch/hadoop/current/configuration.html).
 
-#### Let's try a more complex example,
+### Let's try a more complex example,
 ...of joining a csv text file to the SQL statement
 
 ```hocon
@@ -209,7 +212,7 @@ distribution.  Some settings you might find useful for `csv` include:
 
 **Tip:** For other use cases, read all [CSV Options](https://github.com/databricks/spark-csv)
 
-#### And if you want an example with an Elasticsearch source
+### And if you want an example with an Elasticsearch source
 ...here is the additional part of the configuration:
 
 ```hocon
@@ -232,16 +235,16 @@ distribution.  Some settings you might find useful for `csv` include:
         ]
       }
     ],
-    ...
+    # ...
 }
 ```
 
-Now I have the Elasticsearch index acting as a table.  Again, `settings` maybe applied at the connection or `tables` level
-of the configuration if you have special needs.  And please note that the `esQuery` contains the first level of query 
-filtering, and if absent defaults to a `match_all` query.  You can write the query as above, or you can also include the
-top level `"query": { ... }"` element around the query.
+Now I have the Elasticsearch index acting as a table.  Like before, `settings` maybe applied at the connection or `tables` level
+if you have special needs.  And please note that the `esQuery` contains the first level of query filtering, and if absent 
+defaults to a `match_all` query.  You can write the query as above, or you can also include the top level `"query": { ... }"` 
+element surrounding the query.  
 
-#### Let's go for it, here's a bigger example
+### Let's go for it, here's a bigger example
 ...showing an import that generates nested JSON and also a preparatory step creating temporary tables.
 
 We will use the same source tables as the previous examples and imagine that we now have `Orgs` and `OrgMembers` tables.
@@ -391,3 +394,5 @@ connecting to a Spark cluster using the setting.  It just might work!
 * time zone offsets for any source SQL server (currently substitution times into SQL are local timezone of client)
 * allow date patterns in target index names
 * allow alias swapping at end of loading to a new index (add verifiers before swap?)
+* streaming from MySQL replication
+* other forms of streaming?

@@ -399,6 +399,7 @@ running the `kohesive-es-dih` script.  For example, to set it to 2G: `-Xmx2g`
 
 ### TODOs
 
+* provide mappings with the configuration for newly created indexes, currently using templates is the best way
 * logging the processed count for each statement, currently if the SQL is valid but produces 0 results, you have no idea.
 * time zone offsets for any source SQL server (currently substitution times into SQL are local timezone of client)
 * allow date patterns in target index names

@@ -17,9 +17,9 @@ interface StateManager {
     fun lockStatement(runId: String, statementId: String): Boolean
     fun pingLockStatement(runId: String, statementId: String): Boolean
     fun unlockStatemnt(runId: String, statementId: String)
-    fun writeStateForStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, errMsg: String? = null)
+    fun writeStateForStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String? = null)
     fun readStateForStatement(runId: String, statementId: String): Instant?
-    fun logStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, errMsg: String? = null)
+    fun logStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String? = null)
 }
 
 // TODO: better state management
@@ -102,7 +102,8 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
                              "lastRunDate": { "type": "date" },
                              "status": { "type": "keyword" },
                              "lastRunId": { "type": "keyword" },
-                             "lastErrorMsg": { "type": "text" }
+                             "lastErrorMsg": { "type": "text" },
+                             "lastRowCount": { "type": "long" }
                          }
                      },
                      "log": {
@@ -111,7 +112,8 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
                              "runId": { "type": "keyword" },
                              "runDate": { "type": "date" },
                              "status": { "type": "keyword" },
-                             "errorMsg": { "type": "text" }
+                             "errorMsg": { "type": "text" },
+                             "rowCount": { "type": "long" }
                         }
                      },
                      "lock": {
@@ -203,12 +205,12 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
         }
     }
 
-    data class State(val statementId: String, val lastRunDate: Instant, val status: String, val lastRunId: String, val lastErrorMesasge: String?)
+    data class State(val statementId: String, val lastRunDate: Instant, val status: String, val lastRunId: String, val lastErrorMesasge: String?, val lastRowCount: Long)
 
-    data class StateLog(val statementId: String, val runId: String, val runDate: Instant, val status: String, val errorMsg: String?)
+    data class StateLog(val statementId: String, val runId: String, val runDate: Instant, val status: String, val errorMsg: String?, val rowCount: Long)
 
-    override fun writeStateForStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, errMsg: String?) {
-        val (code, response) = http.post("${makeUrl("state")}/${statementId}?refresh", JSON.writeValueAsString(State(statementId, lastRunStart, status, runId, errMsg)))
+    override fun writeStateForStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String?) {
+        val (code, response) = http.post("${makeUrl("state")}/${statementId}?refresh", JSON.writeValueAsString(State(statementId, lastRunStart, status, runId, errMsg, lastRowCount)))
         if (!code.isSuccess()) {
             throw DataImportException("State manager failed, cannot update state for $statementId\n$response")
         }
@@ -224,8 +226,8 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
         }
     }
 
-    override fun logStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, errMsg: String?) {
-        val (code, response) = http.post("${makeUrl("log")}/${statementId}_run_${runId}?refresh", JSON.writeValueAsString(StateLog(statementId, runId, lastRunStart, status, errMsg)))
+    override fun logStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String?) {
+        val (code, response) = http.post("${makeUrl("log")}/${statementId}_run_${runId}?refresh", JSON.writeValueAsString(StateLog(statementId, runId, lastRunStart, status, errMsg, rowCount)))
         if (!code.isSuccess()) {
             throw DataImportException("State manager failed, cannot log state for $statementId\n$response")
         }

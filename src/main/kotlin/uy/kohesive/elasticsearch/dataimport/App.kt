@@ -205,7 +205,7 @@ class App {
                             try {
                                 val subDataInQuery = statement.sqlQuery.replace("{lastRun}", sqlMinDate).replace("{thisRun}", sqlMaxDate)
                                 val sqlResults = try {
-                                    spark.sql(subDataInQuery)
+                                    spark.sql(subDataInQuery).cache()
                                 } catch (ex: Throwable) {
                                     val msg = ex.toNiceMessage()
                                     throw DataImportException(msg, ex)
@@ -220,12 +220,14 @@ class App {
                                 statement.settings?.let { options.putAll(it) }
 
                                 JavaEsSparkSQL.saveToEs(sqlResults, indexSpec(statement.indexName, statement.type), options)
-                                stateMgr.writeStateForStatement(uniqueId, statement.id, thisRunDate, "success", null)
-                                stateMgr.logStatement(uniqueId, statement.id, thisRunDate, "sucess", null)
+                                val rowCount = sqlResults.count()
+
+                                stateMgr.writeStateForStatement(uniqueId, statement.id, thisRunDate, "success", rowCount, null)
+                                stateMgr.logStatement(uniqueId, statement.id, thisRunDate, "sucess", rowCount, null)
                             } catch (ex: Exception) {
                                 val msg = ex.message ?: "unknown failure"
-                                stateMgr.writeStateForStatement(uniqueId, statement.id, thisRunDate, "error", msg)
-                                stateMgr.logStatement(uniqueId, statement.id, thisRunDate, "error", msg)
+                                stateMgr.writeStateForStatement(uniqueId, statement.id, thisRunDate, "error", 0, msg)
+                                stateMgr.logStatement(uniqueId, statement.id, thisRunDate, "error", 0, msg)
                             } finally {
                                 stateMgr.unlockStatemnt(uniqueId, statement.id)
                             }

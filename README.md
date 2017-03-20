@@ -367,13 +367,13 @@ for full details on the supported SQL.
 A list of [SQL Functions](https://spark.apache.org/docs/2.1.0/api/java/org/apache/spark/sql/functions.html) 
 is available in raw API docs.  (_TODO: find better reference_)
 
-### State Management:
+### State Management and History:
 
 State for the `lastRun` value is per-statement and stored in the target Elasticsearch cluster for that statement.  An index
 will be created called `.kohesive-dih-state` which stores the last run state, a lock for current running statements, and
-a log of all previous runs (success and failures).  You should inspect this log if you wish to monitor the results of
-runs.
+a log of all previous runs (success and failures, along with row count processed by the statement query).  
 
+You should inspect this log (index `.kohesive-dih-state` type `log`)if you wish to monitor the results of runs.
 
 ### Parallelism
 

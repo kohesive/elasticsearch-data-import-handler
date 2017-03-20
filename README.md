@@ -8,7 +8,7 @@ A data import handler for Elasticsearch
 * Process full load and incremental updates
 * Output columnar and structured JSON to Elasticsearch
 
-Running is simple.  Download a release, and then run it:
+Running is simple.  With Java 8 installed, download a release and then run it:
 
 ```
 kohesive-es-dih <configFile.conf>
@@ -338,20 +338,22 @@ This is handy if different documents in the results will have different types.
 
 So at the end we have a result that looks like:
 
-```json
+```hocon
 {
   "docType": "...",
   "guid": "...",
   "identity": "...",
-  ...
+  # ...
   "orgMemberships": [
      {
          "roleOrgGuid": "...",
          "orgDisplayName": "...",
-         ...
+         # ...
      },
      {
-        ...
+         "roleOrgGuid": "...",
+         "orgDisplayName": "...",
+         # ...
      }
   ]
 }
@@ -381,12 +383,19 @@ top-level configuration setting to change the parallelism:
 ```
 {
     "sparkMaster": "local[N]",
-    "sources": { ... } 
+    "sources": { 
+        # ... 
+    } 
 }
 ```
 
 Where `N` is the number of partitions you wish to run.  Since this is the Spark master setting, some people might try
-connecting to a Spark cluster using the setting.  It just might work!
+connecting to a Spark cluster using the setting.  It just might work! 
+
+### Memory Issues
+
+If you run out of memory you can set the Java VM parameters via the `KOHESIVE_ES_DIH_OPTS` environment variable before
+running the `kohesive-es-dih` script.  For example, to set it to 2G: `-Xmx2g` 
 
 ### TODOs
 
@@ -396,3 +405,4 @@ connecting to a Spark cluster using the setting.  It just might work!
 * allow alias swapping at end of loading to a new index (add verifiers before swap?)
 * streaming from MySQL replication
 * other forms of streaming?
+* testing and docs around using Spark Clusters in different forms (stand-alone, YARN, ...)

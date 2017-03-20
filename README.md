@@ -148,7 +148,7 @@ the connection or statement level) are:
     ],
      "filesystem": [
           {
-            "directory": "/Users/jminard",
+            "directory": "/data/sources/raw",
             "tables": [
               {
                 "sparkTable": "UserEmotions",

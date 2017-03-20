@@ -16,10 +16,6 @@ apply plugin: 'application'
 mainClassName = 'uy.kohesive.elasticsearch.dataimport.App'
 applicationName = 'kohesive-es-dih'
 
-task createStartScripts(type: CreateStartScripts) {
-    applicationName = 'kohesive-es-dih'
-}
-
 sourceCompatibility = JavaVersion.VERSION_1_8
 targetCompatibility = JavaVersion.VERSION_1_8
 
@@ -70,4 +66,8 @@ compileKotlin {
 
 task wrapper(type: Wrapper) {
     gradleVersion = version_gradle
+}
+
+tasks.withType(Tar){
+    compression = Compression.GZIP
 }

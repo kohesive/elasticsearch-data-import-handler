@@ -36,7 +36,7 @@ data class JdbcSource(val sparkTable: String,
 data class FileSource(val sparkTable: String, val format: String, val filespecs: List<String>,
                       val settings: Map<String, String>? = null)
 
-data class EsSource(val sparkTable: String, val indexName: String, val type: String, val esQuery: Any? = null,
+data class EsSource(val sparkTable: String, val indexName: String, val type: String?, val esQuery: Any? = null,
                     val settings: Map<String, String>? = null)
 
 data class PrepStatement(val description: String, val sqlQuery: String)

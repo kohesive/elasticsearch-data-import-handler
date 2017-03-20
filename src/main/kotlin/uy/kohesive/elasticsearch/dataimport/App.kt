@@ -86,7 +86,10 @@ class App {
 
         Thread.currentThread().contextClassLoader = newClassLoader
         try {
-            SparkSession.builder().appName("esDataImport-${uniqueId}").master(sparkMaster).getOrCreate().use { spark ->
+            SparkSession.builder()
+                    .appName("esDataImport-${uniqueId}")
+                    .config("spark.ui.enabled", false)
+                    .master(sparkMaster).getOrCreate().use { spark ->
 
                 // setup FILE inputs
                 println()

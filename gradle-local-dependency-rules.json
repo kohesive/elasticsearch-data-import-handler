@@ -1,0 +1,14 @@
+{
+  "exclude": [
+    {
+      "module": "org.slf4j:slf4j-log4j12",
+      "reason": "This does the reverse of what we want, routes to log4j, we want to route to slf4j",
+      "author": "Jayson Minard <jayson.minard@gmail.com>",
+      "date": "2017-02-10T20:00:00.000Z"
+    }
+  ],
+  "replace": [],
+  "align": [],
+  "deny": [],
+  "reject": []
+}

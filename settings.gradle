@@ -1,0 +1,8 @@
+pluginRepositories {
+    maven {
+        url 'https://dl.bintray.com/kotlin/kotlin-eap-1.1'
+    }
+    gradlePluginPortal()
+}
+
+rootProject.name = 'kohesive-elasticsearch-data-import-handler'

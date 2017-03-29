@@ -59,9 +59,7 @@ Lastly you specify `importSteps` which are queries that use any of the `sources`
           "username": "myusername",
           "password": "mypass"
         },
-        "driverJars": [
-          "/Users/myUserName/Downloads/mysql-connector-java-5.1.41/mysql-connector-java-5.1.41-bin.jar"
-        ],
+        "driverJars": [],  # MySQL and Postgres JARS are included automatically, this property can be omitted completely
         "tables": [
           {
             "sparkTable": "Users",
@@ -367,13 +365,21 @@ for full details on the supported SQL.
 A list of [SQL Functions](https://spark.apache.org/docs/2.1.0/api/java/org/apache/spark/sql/functions.html) 
 is available in raw API docs.  (_TODO: find better reference_)
 
+The Data Import Handler also defines some UDF functions for use within SQL:
+
+|Function|Description|
+|-------|-----------|
+|stripHtml(string)|Removes all HTML tags and returns only the text (including unescaping of HTML Entities)|
+|unescapeHtmlEntites(string)|Unescapes HTML entities found in the text|
+|fluffly(string)|A silly function that prepends the word "fluffly" to the text, used as a text function to mark values as being changed by processing|
+
 ### State Management and History:
 
 State for the `lastRun` value is per-statement and stored in the target Elasticsearch cluster for that statement.  An index
-will be created called `.kohesive-dih-state` which stores the last run state, a lock for current running statements, and
+will be created called `.kohesive-dih-state-v2` which stores the last run state, a lock for current running statements, and
 a log of all previous runs (success and failures, along with row count processed by the statement query).  
 
-You should inspect this log (index `.kohesive-dih-state` type `log`)if you wish to monitor the results of runs.
+You should inspect this log (index `.kohesive-dih-state-v2` type `log`)if you wish to monitor the results of runs.
 
 ### Parallelism
 

@@ -35,6 +35,8 @@ dependencies {
 
     compile group: 'org.apache.spark', name: "spark-sql_${version_scala}", version: '2.1.0'
 
+    compile group: 'org.jsoup', name: 'jsoup', version: version_jsoup
+
     resolutionRules group: 'com.netflix.nebula', name: 'gradle-resolution-rules', version: version_nebula_resolution
     resolutionRules files("${rootDir}/gradle-local-dependency-rules.json")
 

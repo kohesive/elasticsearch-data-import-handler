@@ -14,13 +14,15 @@ import java.time.Instant
 
 interface StateManager {
     fun init()
-    fun lockStatement(runId: String, statementId: String): Boolean
-    fun pingLockStatement(runId: String, statementId: String): Boolean
-    fun unlockStatemnt(runId: String, statementId: String)
-    fun writeStateForStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String? = null)
-    fun readStateForStatement(runId: String, statementId: String): Instant?
-    fun logStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String? = null)
+    fun lockStatement(runId: String, statement: EsImportStatement): Boolean
+    fun pingLockStatement(runId: String, statement: EsImportStatement): Boolean
+    fun unlockStatemnt(runId: String, statement: EsImportStatement)
+    fun writeStateForStatement(runId: String, statement: EsImportStatement, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String? = null)
+    fun readStateForStatement(runId: String, statement: EsImportStatement): Instant?
+    fun logStatement(runId: String, statement: EsImportStatement, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String? = null)
 }
+
+private fun EsImportStatement.stateKey(): String = this.indexName + "-" + this.id
 
 // TODO: better state management
 // This is NOT using the ES client because we do not want conflicts with Spark dependencies
@@ -32,7 +34,7 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
         configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, true)
         configure(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS, false)
     }
-    val STATE_INDEX = ".kohesive-dih-state"
+    val STATE_INDEX = ".kohesive-dih-state-v2"
 
     private fun OkHttpClient.get(url: String): Pair<Int, String> {
         val request = Request.Builder().url(url).build()
@@ -98,6 +100,7 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
                   "mappings": {
                      "state": {
                          "properties": {
+                             "targetIndex": { "type": "keyword" },
                              "statementId": { "type": "keyword" },
                              "lastRunDate": { "type": "date" },
                              "status": { "type": "keyword" },
@@ -108,6 +111,7 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
                      },
                      "log": {
                         "properties": {
+                             "targetIndex": { "type": "keyword" },
                              "statementId": { "type": "keyword" },
                              "runId": { "type": "keyword" },
                              "runDate": { "type": "date" },
@@ -118,6 +122,7 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
                      },
                      "lock": {
                         "properties": {
+                             "targetIndex": { "type": "keyword" },
                              "statementId": { "type": "keyword" },
                              "runId": { "type": "keyword" },
                              "lockDate": { "type": "date" }
@@ -137,7 +142,7 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
         ttlKillOldLocks()
     }
 
-    data class Lock(val runId: String, val statementId: String, val lockDate: Instant)
+    data class Lock(val runId: String, val targetIndex: String, val statementId: String, val lockDate: Instant)
 
     fun makeUrl(index: String, type: String) = "$url/$index/$type"
     fun makeUrl(type: String) = makeUrl(STATE_INDEX, type)
@@ -151,19 +156,19 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
         if (!delCode.isSuccess()) throw DataImportException("State manager failed, TTL delete query for locks failed\n$response")
     }
 
-    override fun lockStatement(runId: String, statementId: String): Boolean {
-        val lockUrl = "${makeUrl("lock")}/${statementId}"
-        val (code, response) = http.post("$lockUrl?op_type=create", JSON.writeValueAsString(Lock(runId, statementId, Instant.now())))
+    override fun lockStatement(runId: String, statement: EsImportStatement): Boolean {
+        val lockUrl = "${makeUrl("lock")}/${statement.stateKey()}"
+        val (code, response) = http.post("$lockUrl?op_type=create", JSON.writeValueAsString(Lock(runId, statement.indexName, statement.id, Instant.now())))
 
         if (!code.isSuccess()) {
             ttlKillOldLocks()
-            return pingLockStatement(runId, statementId)
+            return pingLockStatement(runId, statement)
         }
         return true
     }
 
-    override fun pingLockStatement(runId: String, statementId: String): Boolean {
-        val lockUrl = "${makeUrl("lock")}/${statementId}"
+    override fun pingLockStatement(runId: String, statement: EsImportStatement): Boolean {
+        val lockUrl = "${makeUrl("lock")}/${statement.stateKey()}"
         val (getCode, response) = http.get(lockUrl)
         if (getCode.isSuccess()) {
             val lock = mapFromSource<Lock>(response)
@@ -179,45 +184,47 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
                             "bool": {
                                "must": [
                                   { "term": { "runId": "$runId" } },
-                                  { "term": { "statementId": "$statementId" } }
+                                  { "term": { "targetIndex": "${statement.indexName}" } },
+                                  { "term": { "statementId": "${statement.id}" } }
                                ]
                             }
                         }
                     }
                 """)
                 if (!updCode.isSuccess()) {
-                    throw DataImportException("State manager failed, cannot acquire lock for $statementId - had conflict on pinging of lock\n$updResponse")
+                    throw DataImportException("State manager failed, cannot acquire lock for ${statement.stateKey()} - had conflict on pinging of lock\n$updResponse")
                 }
             } else {
-                throw DataImportException("State manager failed, cannot acquire lock for $statementId -- it is held by ${lock.runId} since ${lock.lockDate.toIsoString()}\n$response")
+                throw DataImportException("State manager failed, cannot acquire lock for ${statement.stateKey()} -- it is held by ${lock.runId} since ${lock.lockDate.toIsoString()}\n$response")
             }
         }
         return true
     }
 
-    override fun unlockStatemnt(runId: String, statementId: String) {
-        if (pingLockStatement(runId, statementId)) {
-            val lockUrl = "${makeUrl("lock")}/${statementId}?refresh"
+    override fun unlockStatemnt(runId: String, statement: EsImportStatement) {
+        if (pingLockStatement(runId, statement)) {
+            val lockUrl = "${makeUrl("lock")}/${statement.stateKey()}?refresh"
             val (code, response) = http.delete(lockUrl)
             if (!code.isSuccess()) {
-                throw DataImportException("State manager failed, cannot delete lock for $statementId\n$response")
+                throw DataImportException("State manager failed, cannot delete lock for ${statement.stateKey()}\n$response")
             }
         }
     }
 
-    data class State(val statementId: String, val lastRunDate: Instant, val status: String, val lastRunId: String, val lastErrorMesasge: String?, val lastRowCount: Long)
+    data class State(val targetIndex: String, val statementId: String, val lastRunDate: Instant, val status: String, val lastRunId: String, val lastErrorMesasge: String?, val lastRowCount: Long)
 
-    data class StateLog(val statementId: String, val runId: String, val runDate: Instant, val status: String, val errorMsg: String?, val rowCount: Long)
+    data class StateLog(val targetIndex: String, val statementId: String, val runId: String, val runDate: Instant, val status: String, val errorMsg: String?, val rowCount: Long)
 
-    override fun writeStateForStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String?) {
-        val (code, response) = http.post("${makeUrl("state")}/${statementId}?refresh", JSON.writeValueAsString(State(statementId, lastRunStart, status, runId, errMsg, lastRowCount)))
+    override fun writeStateForStatement(runId: String, statement: EsImportStatement, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String?) {
+        val (code, response) = http.post("${makeUrl("state")}/${statement.stateKey()}?refresh",
+                JSON.writeValueAsString(State(statement.indexName, statement.id, lastRunStart, status, runId, errMsg, lastRowCount)))
         if (!code.isSuccess()) {
-            throw DataImportException("State manager failed, cannot update state for $statementId\n$response")
+            throw DataImportException("State manager failed, cannot update state for ${statement.stateKey()}\n$response")
         }
     }
 
-    override fun readStateForStatement(runId: String, statementId: String): Instant? {
-        val (code, response) = http.get("${makeUrl("state")}/${statementId}")
+    override fun readStateForStatement(runId: String, statement: EsImportStatement): Instant? {
+        val (code, response) = http.get("${makeUrl("state")}/${statement.stateKey()}")
         if (code.isSuccess()) {
             val state = mapFromSource<State>(response)
             return state.lastRunDate
@@ -226,10 +233,11 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
         }
     }
 
-    override fun logStatement(runId: String, statementId: String, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String?) {
-        val (code, response) = http.post("${makeUrl("log")}/${statementId}_run_${runId}?refresh", JSON.writeValueAsString(StateLog(statementId, runId, lastRunStart, status, errMsg, rowCount)))
+    override fun logStatement(runId: String, statement: EsImportStatement, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String?) {
+        val (code, response) = http.post("${makeUrl("log")}/${statement.stateKey()}_run_${runId}?refresh",
+                JSON.writeValueAsString(StateLog(statement.indexName, statement.id, runId, lastRunStart, status, errMsg, rowCount)))
         if (!code.isSuccess()) {
-            throw DataImportException("State manager failed, cannot log state for $statementId\n$response")
+            throw DataImportException("State manager failed, cannot log state for ${statement.stateKey()}\n$response")
         }
     }
 }

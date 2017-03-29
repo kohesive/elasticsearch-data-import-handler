@@ -10,6 +10,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.elasticsearch.spark.sql.api.java.JavaEsSparkSQL
+import uy.kohesive.elasticsearch.dataimport.udf.Udfs
 import java.io.File
 import java.io.InputStream
 import java.io.InputStreamReader
@@ -71,9 +72,9 @@ class App {
 
         val lastRuns: Map<String, Instant> = cfg.importSteps.map { importStep ->
             importStep.statements.map { statement ->
-                val lastState = stateMap.get(statement.id)!!.readStateForStatement(uniqueId, statement.id)?.truncatedTo(ChronoUnit.SECONDS) ?: NOSTATE
+                val lastState = stateMap.get(statement.id)!!.readStateForStatement(uniqueId, statement)?.truncatedTo(ChronoUnit.SECONDS) ?: NOSTATE
                 println("  Statement ${statement.id} - ${statement.description}")
-                println("     LAST RUN: ${if (lastState === NOSTATE) "never" else lastState.toIsoString()}")
+                println("     LAST RUN: ${if (lastState == NOSTATE) "never" else lastState.toIsoString()}")
                 statement.id to lastState
             }
         }.flatten().toMap()
@@ -92,9 +93,7 @@ class App {
                     .master(sparkMaster).getOrCreate().use { spark ->
 
                 // add extra UDF functions
-                // TODO: udf's
-
-                // spark.udf().register("fluffy")
+                DataImportHandlerUdfs.registerSparkUdfs(spark)
 
                 // setup FILE inputs
                 println()
@@ -206,8 +205,13 @@ class App {
                         val sqlMinDate = Timestamp.from(lastRun).toString()
                         val sqlMaxDate = Timestamp.from(thisRunDate).toString()
 
-                        println("\n    Execute statement:  (range '$sqlMinDate' to '$sqlMaxDate')\n${statement.description.replaceIndent("        ")}")
-                        if (!stateMgr.lockStatement(uniqueId, statement.id)) {
+                        val dateMsg = if (lastRun == NOSTATE) {
+                           "range NEVER to '$sqlMaxDate'"
+                        } else {
+                           "range '$sqlMinDate' to '$sqlMaxDate'"
+                        }
+                        println("\n    Execute statement:  ($dateMsg)\n${statement.description.replaceIndent("        ")}")
+                        if (!stateMgr.lockStatement(uniqueId, statement)) {
                             System.err.println("        Cannot aquire lock for statement ${statement.id}")
                         } else {
                             try {
@@ -231,14 +235,15 @@ class App {
                                 val rowCount = sqlResults.count()
                                 println("        Rows processed: $rowCount")
 
-                                stateMgr.writeStateForStatement(uniqueId, statement.id, thisRunDate, "success", rowCount, null)
-                                stateMgr.logStatement(uniqueId, statement.id, thisRunDate, "sucess", rowCount, null)
+                                stateMgr.writeStateForStatement(uniqueId, statement, thisRunDate, "success", rowCount, null)
+                                stateMgr.logStatement(uniqueId, statement, thisRunDate, "sucess", rowCount, null)
                             } catch (ex: Exception) {
                                 val msg = ex.message ?: "unknown failure"
-                                stateMgr.writeStateForStatement(uniqueId, statement.id, thisRunDate, "error", 0, msg)
-                                stateMgr.logStatement(uniqueId, statement.id, thisRunDate, "error", 0, msg)
+                                stateMgr.writeStateForStatement(uniqueId, statement, lastRun, "error", 0, msg)
+                                stateMgr.logStatement(uniqueId, statement, thisRunDate, "error", 0, msg)
+                                System.err.println("\nProcess FAILED:  \n$msg\n")
                             } finally {
-                                stateMgr.unlockStatemnt(uniqueId, statement.id)
+                                stateMgr.unlockStatemnt(uniqueId, statement)
                             }
                         }
                     }

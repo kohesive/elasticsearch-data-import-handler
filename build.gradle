@@ -40,8 +40,8 @@ dependencies {
     compile group: 'org.slf4j', name: 'slf4j-api', version: version_slf4j
     runtime group: 'ch.qos.logback', name: 'logback-classic', version: version_logback
 
-    // compile group: 'mysql', name: 'mysql-connector-java', version: '5.1.41'
-    // compile group: 'org.postgresql', name: 'postgresql', version: '42.0.0'
+    compile group: 'mysql', name: 'mysql-connector-java', version: version_jdbc_mysql
+    compile group: 'org.postgresql', name: 'postgresql', version: 'version_jdbc_postresql'
 
     testCompile group: 'junit', name: 'junit', version: version_junit
     testCompile  group: 'org.jetbrains.kotlin', name: 'kotlin-test-junit'

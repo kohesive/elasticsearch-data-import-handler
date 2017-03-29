@@ -91,6 +91,11 @@ class App {
                     .config("spark.ui.enabled", false)
                     .master(sparkMaster).getOrCreate().use { spark ->
 
+                // add extra UDF functions
+                // TODO: udf's
+
+                // spark.udf().register("fluffy")
+
                 // setup FILE inputs
                 println()
                 cfg.sources.filesystem?.forEach { filesystem ->
@@ -201,7 +206,7 @@ class App {
                         val sqlMinDate = Timestamp.from(lastRun).toString()
                         val sqlMaxDate = Timestamp.from(thisRunDate).toString()
 
-                        println("\n    Execute statement:  (range $sqlMinDate' to '$sqlMaxDate')\n${statement.description.replaceIndent("        ")}")
+                        println("\n    Execute statement:  (range '$sqlMinDate' to '$sqlMaxDate')\n${statement.description.replaceIndent("        ")}")
                         if (!stateMgr.lockStatement(uniqueId, statement.id)) {
                             System.err.println("        Cannot aquire lock for statement ${statement.id}")
                         } else {
@@ -224,6 +229,7 @@ class App {
 
                                 JavaEsSparkSQL.saveToEs(sqlResults, indexSpec(statement.indexName, statement.type), options)
                                 val rowCount = sqlResults.count()
+                                println("        Rows processed: $rowCount")
 
                                 stateMgr.writeStateForStatement(uniqueId, statement.id, thisRunDate, "success", rowCount, null)
                                 stateMgr.logStatement(uniqueId, statement.id, thisRunDate, "sucess", rowCount, null)

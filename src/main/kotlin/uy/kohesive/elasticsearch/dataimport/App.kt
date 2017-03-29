@@ -10,7 +10,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.elasticsearch.spark.sql.api.java.JavaEsSparkSQL
-import uy.kohesive.elasticsearch.dataimport.udf.Udfs
 import java.io.File
 import java.io.InputStream
 import java.io.InputStreamReader
@@ -38,7 +37,7 @@ class App {
             }
 
             try {
-                App().run(configFile!!.inputStream())
+                App().run(configFile!!.inputStream(), configFile)
             } catch (ex: Throwable) {
                 System.err.println("Data import failed due to:")
                 System.err.println(ex.message)
@@ -50,7 +49,7 @@ class App {
         }
     }
 
-    fun run(configInput: InputStream) {
+    fun run(configInput: InputStream, configRelativeDir: File) {
         val hoconCfg = ConfigFactory.parseReader(InputStreamReader(configInput)).resolve(ConfigResolveOptions.noSystem())
         val jsonCfg = hoconCfg.root().render(ConfigRenderOptions.concise().setJson(true))
         val cfg = jacksonObjectMapper().readValue<EsDataImportHandlerConfig>(jsonCfg)
@@ -58,6 +57,10 @@ class App {
         val uniqueId = UUID.randomUUID().toString()
 
         val sparkMaster = cfg.sparkMaster ?: "local[${(Runtime.getRuntime().availableProcessors() - 1).coerceAtLeast(1)}]"
+
+        fun fileRelativeToConfig(filename: String): File {
+            return configRelativeDir.resolve(filename).canonicalFile
+        }
 
         println("Connecting to target ES clusters to check state...")
         val stateMap: Map<String, StateManager> = cfg.importSteps.map { importStep ->
@@ -75,6 +78,20 @@ class App {
                 val lastState = stateMap.get(statement.id)!!.readStateForStatement(uniqueId, statement)?.truncatedTo(ChronoUnit.SECONDS) ?: NOSTATE
                 println("  Statement ${statement.id} - ${statement.description}")
                 println("     LAST RUN: ${if (lastState == NOSTATE) "never" else lastState.toIsoString()}")
+
+                // do a little validation of the statement...
+                if (statement.newIndexSettingsFile != null) {
+                    val checkFile = fileRelativeToConfig(statement.newIndexSettingsFile)
+                    if (!checkFile.exists()) {
+                        throw IllegalStateException("The statement '${statement.id}' new-index mapping file must exist: $checkFile")
+                    }
+                }
+                if (statement.indexType == null && statement.type == null) {
+                    throw IllegalArgumentException("The statement '${statement.id}' is missing `indexType`")
+                }
+                if (statement.type != null && statement.indexType == null) {
+                    System.err.println("     Statement configuration parameter `type` is deprecated, use `indexType`")
+                }
                 statement.id to lastState
             }
         }.flatten().toMap()
@@ -146,7 +163,14 @@ class App {
                 cfg.sources.elasticsearch?.forEach { es ->
                     println("Mounting Elasticsearch source ${es.nodes.joinToString()}")
                     es.tables.forEach { table ->
-                        println("Creating table ${table.sparkTable} from Elasticsearch index ${table.indexName}")
+                        val indexType = table.indexType ?: table.type
+                        println("Creating table ${table.sparkTable} from Elasticsearch index ${table.indexName}/${indexType}")
+                        if (indexType == null) {
+                            throw IllegalArgumentException("  Source configuration is missing parameter `indexType`")
+                        }
+                        if (table.type != null) {
+                            System.err.println("  Source configuration parameter `type` is deprecated, use `indexType`")
+                        }
                         val options = mutableMapOf("es.nodes" to es.nodes.joinToString(","))
                         es.basicAuth?.let {
                             options.put("es.net.http.auth.user", it.username)
@@ -169,7 +193,7 @@ class App {
 
                         spark.read().format("org.elasticsearch.spark.sql")
                                 .options(options)
-                                .load(indexSpec(table.indexName, table.type))
+                                .load(indexSpec(table.indexName, indexType))
                                 .registerTempTable(table.sparkTable)
                     }
                 }
@@ -206,22 +230,18 @@ class App {
                         val sqlMaxDate = Timestamp.from(thisRunDate).toString()
 
                         val dateMsg = if (lastRun == NOSTATE) {
-                           "range NEVER to '$sqlMaxDate'"
+                            "range NEVER to '$sqlMaxDate'"
                         } else {
-                           "range '$sqlMinDate' to '$sqlMaxDate'"
+                            "range '$sqlMinDate' to '$sqlMaxDate'"
                         }
+
                         println("\n    Execute statement:  ($dateMsg)\n${statement.description.replaceIndent("        ")}")
+
                         if (!stateMgr.lockStatement(uniqueId, statement)) {
                             System.err.println("        Cannot aquire lock for statement ${statement.id}")
                         } else {
                             try {
-                                val subDataInQuery = statement.sqlQuery.replace("{lastRun}", sqlMinDate).replace("{thisRun}", sqlMaxDate)
-                                val sqlResults = try {
-                                    spark.sql(subDataInQuery).cache()
-                                } catch (ex: Throwable) {
-                                    val msg = ex.toNiceMessage()
-                                    throw DataImportException(msg, ex)
-                                }
+                                // look for table create setting
 
                                 val options = mutableMapOf("es.nodes" to import.targetElasticsearch.nodes.joinToString(","))
                                 import.targetElasticsearch.basicAuth?.let {
@@ -231,17 +251,49 @@ class App {
                                 import.targetElasticsearch.settings?.let { options.putAll(it) }
                                 statement.settings?.let { options.putAll(it) }
 
-                                JavaEsSparkSQL.saveToEs(sqlResults, indexSpec(statement.indexName, statement.type), options)
+                                val autocreate: Boolean = options.getOrDefault("es.index.auto.create", "true").toBoolean()
+                                val esClient = MicroEsClient(import.targetElasticsearch.nodes, import.targetElasticsearch.basicAuth)
+                                val indexExists = esClient.checkIndexExists(statement.indexName)
+                                if (!autocreate) {
+                                    if (!indexExists) {
+                                        throw IllegalStateException("Index auto-create setting 'es.index.auto.create' is false and index ${statement.indexName} does not exist.")
+                                    }
+                                } else {
+                                    if (!indexExists) {
+                                        println("        Index ${statement.indexName} does not exist, auto creating")
+                                        if (statement.newIndexSettingsFile != null) {
+                                            val checkFile = fileRelativeToConfig(statement.newIndexSettingsFile)
+                                            println("        Creating ${statement.indexName} with settings/mapping file: $checkFile")
+                                            val response = esClient.createIndex(statement.indexName, checkFile.readText())
+                                            if (!response.isSuccess) {
+                                                throw IllegalStateException("Could not create index ${statement.indexName} with settings/mapping file: $checkFile, due to:\n${response.responseJson}")
+                                            }
+                                        }  else {
+                                            println("        Index will be created without settings/mappings file, will use index templates or dynamic mappings")
+                                        }
+                                    }
+                                }
+
+                                val subDataInQuery = statement.sqlQuery.replace("{lastRun}", sqlMinDate).replace("{thisRun}", sqlMaxDate)
+                                val sqlResults = try {
+                                    spark.sql(subDataInQuery).cache()
+                                } catch (ex: Throwable) {
+                                    val msg = ex.toNiceMessage()
+                                    throw DataImportException(msg, ex)
+                                }
+
+                                JavaEsSparkSQL.saveToEs(sqlResults, indexSpec(statement.indexName, statement.indexType ?: statement.type), options)
                                 val rowCount = sqlResults.count()
                                 println("        Rows processed: $rowCount")
 
                                 stateMgr.writeStateForStatement(uniqueId, statement, thisRunDate, "success", rowCount, null)
                                 stateMgr.logStatement(uniqueId, statement, thisRunDate, "sucess", rowCount, null)
-                            } catch (ex: Exception) {
+                            } catch (ex: Throwable) {
                                 val msg = ex.message ?: "unknown failure"
                                 stateMgr.writeStateForStatement(uniqueId, statement, lastRun, "error", 0, msg)
                                 stateMgr.logStatement(uniqueId, statement, thisRunDate, "error", 0, msg)
-                                System.err.println("\nProcess FAILED:  \n$msg\n")
+                                // System.err.println("\nProcess FAILED:  \n$msg\n")
+                                throw ex
                             } finally {
                                 stateMgr.unlockStatemnt(uniqueId, statement)
                             }

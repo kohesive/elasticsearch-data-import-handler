@@ -1,0 +1,420 @@
+{
+  "settings": {
+    "index": {
+      "analysis": {
+        "filter": {
+          "de_stop_filter": {
+            "type": "stop",
+            "stopwords": "_german_"
+          },
+          "de_stemmer_filter": {
+            "type": "stemmer",
+            "langauge": "minimal_german",
+            "respect_keywords": true
+          },
+          "unique_same_position_filter": {
+            "type": "unique",
+            "only_on_same_position": true
+          },
+          "de_decomp_filter": {
+            "type": "decompound",
+            "language": "de",
+            "respect_keywords": true
+          },
+          "de_fst_decomp_filter": {
+            "type": "fst_decompound",
+            "language": "de",
+            "respect_keywords": true
+          },
+          "de_baseform_filter": {
+            "type": "baseform",
+            "language": "de",
+            "respect_keywords": true
+          },
+          "de_lemmatize_filter": {
+            "type": "lemmatize",
+            "language": "de",
+            "respect_keywords": true
+          },
+          "de_synonym_lowercase_filter": {
+            "type": "synonym",
+            "synonyms_path": "analysis/de-synonyms-lowercase-minimal.txt",
+            "respect_keywords": true
+          },
+          "de_synonym_casesensitive_filter": {
+            "type": "synonym",
+            "synonyms_path": "analysis/de-synonyms-case-sensitive-minimal.txt",
+            "respect_keywords": true
+          },
+          "haystack_ngram_filter": {
+            "type": "nGram",
+            "min_gram": "3",
+            "max_gram": "15"
+          }
+        },
+        "analyzer": {
+          "de_decomp_query_analysis": {
+            "type": "custom",
+            "tokenizer": "icu_tokenizer",
+            "filter": [
+              "keyword_repeat",
+              "de_synonym_casesensitive_filter",
+              "icu_normalizer",
+              "de_stop_filter",
+              "de_synonym_lowercase_filter",
+              "de_lemmatize_filter",
+              "icu_folding",
+              "unique_same_position_filter"
+            ]
+          },
+          "de_decomp_index_analysis": {
+            "type": "custom",
+            "tokenizer": "icu_tokenizer",
+            "filter": [
+              "keyword_repeat",
+              "de_synonym_casesensitive_filter",
+              "icu_normalizer",
+              "de_stop_filter",
+              "de_synonym_lowercase_filter",
+              "de_decomp_filter",
+              "de_lemmatize_filter",
+              "icu_folding",
+              "unique_same_position_filter"
+            ]
+          },
+          "de_decomp_nostop_query_analysis": {
+            "type": "custom",
+            "tokenizer": "icu_tokenizer",
+            "filter": [
+              "keyword_repeat",
+              "de_synonym_casesensitive_filter",
+              "icu_normalizer",
+              "de_synonym_lowercase_filter",
+              "de_lemmatize_filter",
+              "icu_folding",
+              "unique_same_position_filter"
+            ]
+          },
+          "de_decomp_nostop_index_analysis": {
+            "type": "custom",
+            "tokenizer": "icu_tokenizer",
+            "filter": [
+              "keyword_repeat",
+              "de_synonym_casesensitive_filter",
+              "icu_normalizer",
+              "de_synonym_lowercase_filter",
+              "de_decomp_filter",
+              "de_lemmatize_filter",
+              "icu_folding",
+              "unique_same_position_filter"
+            ]
+          },
+          "de_synonym_analysis": {
+            "type": "custom",
+            "tokenizer": "icu_tokenizer",
+            "filter": [
+              "keyword_repeat",
+              "de_synonym_casesensitive_filter",
+              "icu_normalizer",
+              "de_stop_filter",
+              "de_synonym_lowercase_filter",
+              "de_lemmatize_filter",
+              "icu_folding",
+              "de_stemmer_filter",
+              "unique_same_position_filter"
+            ]
+          },
+          "de_synonym_nostop_analysis": {
+            "type": "custom",
+            "tokenizer": "icu_tokenizer",
+            "filter": [
+              "keyword_repeat",
+              "de_synonym_casesensitive_filter",
+              "icu_normalizer",
+              "de_synonym_lowercase_filter",
+              "de_lemmatize_filter",
+              "icu_folding",
+              "de_stemmer_filter",
+              "unique_same_position_filter"
+            ]
+          },
+          "de_base_analysis": {
+            "type": "custom",
+            "tokenizer": "icu_tokenizer",
+            "filter": [
+              "icu_normalizer",
+              "de_stop_filter",
+              "icu_folding",
+              "de_stemmer_filter"
+            ]
+          },
+          "de_base_nostop_analysis": {
+            "type": "custom",
+            "tokenizer": "icu_tokenizer",
+            "filter": [
+              "icu_normalizer",
+              "icu_folding",
+              "de_stemmer_filter"
+            ]
+          },
+          "ngram_analysis": {
+            "type": "custom",
+            "filter": [
+              "icu_normalizer",
+              "haystack_ngram_filter"
+            ],
+            "tokenizer": "standard"
+          }
+        }
+      },
+      "number_of_shards": "5",
+      "number_of_replicas": "0"
+    }
+  },
+  "mappings": {
+    "modelresult": {
+      "_all": {
+        "enabled": false
+      },
+      "properties": {
+        "content_auto": {
+          "type": "text",
+          "analyzer": "ngram_analysis"
+        },
+        "heading": {
+          "type": "text",
+          "analyzer": "ngram_analysis",
+          "fields": {
+            "raw": {
+              "type": "text",
+              "analyzer": "german"
+            },
+            "de_base": {
+              "type": "text",
+              "analyzer": "de_base_analysis"
+            },
+            "de_syn": {
+              "type": "text",
+              "analyzer": "de_synonym_analysis"
+            },
+            "de_decomp": {
+              "type": "text",
+              "analyzer": "de_decomp_index_analysis",
+              "search_analyzer": "de_decomp_query_analysis"
+            },
+            "ngram": {
+              "type": "text",
+              "analyzer": "ngram_analysis"
+            }
+          }
+        },
+        "date": {
+          "type": "date",
+          "format": "date_optional_time||epoch_millis"
+        },
+        "django_ct": {
+          "type": "keyword",
+          "include_in_all": false
+        },
+        "django_id": {
+          "type": "keyword",
+          "include_in_all": false
+        },
+        "id": {
+          "type": "keyword"
+        },
+        "type": {
+          "type": "keyword"
+        },
+        "offer": {
+          "type": "boolean"
+        },
+        "staffname": {
+          "type": "text",
+          "copy_to": "spelldata",
+          "fields": {
+            "raw": {
+              "type": "text",
+              "analyzer": "german"
+            },
+            "de_base": {
+              "type": "text",
+              "analyzer": "de_base_analysis"
+            },
+            "de_base_nostop": {
+              "type": "text",
+              "analyzer": "de_base_nostop_analysis"
+            },
+            "de_syn": {
+              "type": "text",
+              "analyzer": "de_synonym_analysis"
+            },
+            "de_syn_nostop": {
+              "type": "text",
+              "analyzer": "de_synonym_nostop_analysis"
+            },
+            "de_decomp": {
+              "type": "text",
+              "analyzer": "de_decomp_index_analysis",
+              "search_analyzer": "de_decomp_query_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_decomp_nostop": {
+              "type": "text",
+              "analyzer": "de_decomp_nostop_index_analysis",
+              "search_analyzer": "de_decomp_nostop_query_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "ngram": {
+              "type": "text",
+              "analyzer": "ngram_analysis"
+            }
+          }
+        },
+        "text": {
+          "type": "text",
+          "copy_to": "spelldata",
+          "fields": {
+            "raw": {
+              "type": "text",
+              "analyzer": "german",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_base": {
+              "type": "text",
+              "analyzer": "de_base_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_base_nostop": {
+              "type": "text",
+              "analyzer": "de_base_nostop_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_syn_nostop": {
+              "type": "text",
+              "analyzer": "de_synonym_nostop_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_syn": {
+              "type": "text",
+              "analyzer": "de_synonym_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_decomp": {
+              "type": "text",
+              "analyzer": "de_decomp_index_analysis",
+              "search_analyzer": "de_decomp_query_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_decomp_nostop": {
+              "type": "text",
+              "analyzer": "de_decomp_nostop_index_analysis",
+              "search_analyzer": "de_decomp_nostop_query_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "ngram": {
+              "type": "text",
+              "analyzer": "ngram_analysis"
+            }
+          },
+          "term_vector": "with_positions_offsets"
+        },
+        "title": {
+          "type": "text",
+          "copy_to": "spelldata",
+          "fields": {
+            "raw": {
+              "type": "text",
+              "analyzer": "german",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_base": {
+              "type": "text",
+              "analyzer": "de_base_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_base_nostop": {
+              "type": "text",
+              "analyzer": "de_base_nostop_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_syn_nostop": {
+              "type": "text",
+              "analyzer": "de_synonym_nostop_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_syn": {
+              "type": "text",
+              "analyzer": "de_synonym_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_decomp": {
+              "type": "text",
+              "analyzer": "de_decomp_index_analysis",
+              "search_analyzer": "de_decomp_query_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_decomp_nostop": {
+              "type": "text",
+              "analyzer": "de_decomp_nostop_index_analysis",
+              "search_analyzer": "de_decomp_nostop_query_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "ngram": {
+              "type": "text",
+              "analyzer": "ngram_analysis"
+            }
+          },
+          "term_vector": "with_positions_offsets"
+        },
+        "spelldata": {
+          "type": "text",
+          "fields": {
+            "raw": {
+              "type": "text",
+              "analyzer": "german",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_base": {
+              "type": "text",
+              "analyzer": "de_base_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_base_nostop": {
+              "type": "text",
+              "analyzer": "de_base_nostop_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_syn_nostop": {
+              "type": "text",
+              "analyzer": "de_synonym_nostop_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_syn": {
+              "type": "text",
+              "analyzer": "de_synonym_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_decomp": {
+              "type": "text",
+              "analyzer": "de_decomp_index_analysis",
+              "search_analyzer": "de_decomp_query_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "de_decomp_nostop": {
+              "type": "text",
+              "analyzer": "de_decomp_nostop_index_analysis",
+              "search_analyzer": "de_decomp_nostop_query_analysis",
+              "term_vector": "with_positions_offsets"
+            },
+            "ngram": {
+              "type": "text",
+              "analyzer": "ngram_analysis"
+            }
+          },
+          "term_vector": "with_positions_offsets"
+        }
+      }
+    }
+  }
+}

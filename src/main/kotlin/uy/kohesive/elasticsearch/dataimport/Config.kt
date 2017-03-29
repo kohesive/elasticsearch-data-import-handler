@@ -15,7 +15,8 @@ data class Connections(val elasticsearch: List<EsConnection>?,
 data class EsConnection(val nodes: List<String>,
                         val basicAuth: AuthInfo? = null,
                         val tables: List<EsSource>,
-                        val settings: Map<String, String>? = null)
+                        val settings: Map<String, String>? = null) {
+}
 
 data class JdbcConnection(val jdbcUrl: String,
                           val driverClass: String,
@@ -36,7 +37,7 @@ data class JdbcSource(val sparkTable: String,
 data class FileSource(val sparkTable: String, val format: String, val filespecs: List<String>,
                       val settings: Map<String, String>? = null)
 
-data class EsSource(val sparkTable: String, val indexName: String, val type: String?, val esQuery: Any? = null,
+data class EsSource(val sparkTable: String, val indexName: String, val type: String?, val indexType: String?, val esQuery: Any? = null,
                     val settings: Map<String, String>? = null)
 
 data class PrepStatement(val description: String, val sqlQuery: String)
@@ -44,8 +45,14 @@ data class PrepStatement(val description: String, val sqlQuery: String)
 data class Importer(val description: String, val targetElasticsearch: EsTargetConnection, val statements: List<EsImportStatement>)
 data class EsTargetConnection(val nodes: List<String>,
                               val basicAuth: AuthInfo? = null,
-                              val settings: Map<String, String>? = null)
+                              val settings: Map<String, String>? = null) {
 
-// sparkWriteSettings = mapOf("es.index.auto.create" to "true")
-data class EsImportStatement(val id: String, val description: String, val indexName: String, val type: String, val sqlQuery: String, val settings: Map<String, String>? = null)
+}
+
+data class EsImportStatement(val id: String, val description: String,
+                             val indexName: String, val indexType: String?,
+                             val type: String?,
+                             val newIndexSettingsFile: String?,
+                             val sqlQuery: String,
+                             val settings: Map<String, String>? = null)
 

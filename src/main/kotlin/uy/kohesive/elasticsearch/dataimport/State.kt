@@ -27,71 +27,14 @@ private fun EsImportStatement.stateKey(): String = this.indexName + "-" + this.i
 // TODO: better state management
 // This is NOT using the ES client because we do not want conflicts with Spark dependencies
 class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : StateManager {
-    val http = OkHttpClient()
-    val url = if (auth != null) "http://${auth.username}:${auth.password}@${nodes.first()}" else "http://${nodes.first()}"
-    val JSON = jacksonObjectMapper().registerModules(JavaTimeModule(), Jdk8Module()).apply {
-        configure(SerializationFeature.WRITE_DATE_TIMESTAMPS_AS_NANOSECONDS, false)
-        configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, true)
-        configure(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS, false)
-    }
     val STATE_INDEX = ".kohesive-dih-state-v2"
-
-    private fun OkHttpClient.get(url: String): Pair<Int, String> {
-        val request = Request.Builder().url(url).build()
-        val response = http.newCall(request).execute()
-        return response.code() to response.use { it.body().string() }
-    }
-
-    private fun OkHttpClient.delete(url: String): Pair<Int, String> {
-        val request = Request.Builder().url(url).delete().build()
-        val response = http.newCall(request).execute()
-        return response.code() to response.use { it.body().string() }
-    }
-
-    private fun OkHttpClient.delete(url: String, jsonBody: String): Pair<Int, String> {
-        val jsonMediaType = MediaType.parse("application/json; charset=utf-8")
-        val body = RequestBody.create(jsonMediaType, jsonBody)
-        val request = Request.Builder().url(url).delete(body).build()
-        val response = http.newCall(request).execute()
-        return response.code() to response.use { it.body().string() }
-    }
-
-    private fun OkHttpClient.post(url: String, jsonBody: String): Pair<Int, String> {
-        val jsonMediaType = MediaType.parse("application/json; charset=utf-8")
-        val body = RequestBody.create(jsonMediaType, jsonBody)
-        val request = Request.Builder().url(url).post(body).build()
-        val response = http.newCall(request).execute()
-        return response.code() to response.use { it.body().string() }
-    }
-
-    private fun OkHttpClient.put(url: String, jsonBody: String): Pair<Int, String> {
-        val jsonMediaType = MediaType.parse("application/json; charset=utf-8")
-        val body = RequestBody.create(jsonMediaType, jsonBody)
-        val request = Request.Builder().url(url).put(body).build()
-        val response = http.newCall(request).execute()
-        return response.code() to response.use { it.body().string() }
-    }
-
-    private fun waitForIndexGreen(indexName: String) {
-        val (code, response) = http.get("${url}/_cluster/health/${indexName}?wait_for_status=green&timeout=10s")
-        if (!code.isSuccess()) throw DataImportException("State manager failed, cannot check state index status")
-        val state = JSON.readTree(response)
-        if (state.get("timed_out").asBoolean()) throw DataImportException("State manager failed, timeout waiting on state index to be 'green'")
-        if (state.get("status").asText() != "green") throw DataImportException("State manager failed, state index must be 'green' but was '${state.get("status")}'")
-    }
-
-    private fun checkIndexExists(indexName: String): Boolean {
-        val (code, _) = http.get("${url}/${indexName}")
-        return code.isSuccess()
-    }
-
-    private fun Int.isSuccess(): Boolean = this in 200..299
+    val esClient = MicroEsClient(nodes, auth)
 
     override fun init() {
-        if (checkIndexExists(STATE_INDEX)) {
-            waitForIndexGreen(STATE_INDEX)
+        if (esClient.checkIndexExists(STATE_INDEX)) {
+            esClient.waitForIndexGreen(STATE_INDEX)
         } else {
-            val (code, response) = http.put("${url}/${STATE_INDEX}", """
+            val response = esClient.createIndex(STATE_INDEX, """
                {
                   "settings": {
                       "number_of_shards": 1,
@@ -132,10 +75,10 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
                }
             """)
 
-            if (code.isSuccess()) {
-                waitForIndexGreen(STATE_INDEX)
+            if (response.isSuccess) {
+                esClient.waitForIndexGreen(STATE_INDEX)
             } else {
-                throw DataImportException("State manager failed, cannot create state index\n$response")
+                throw DataImportException("State manager failed, cannot create state index\n${response.responseJson}")
             }
         }
 
@@ -144,23 +87,19 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
 
     data class Lock(val runId: String, val targetIndex: String, val statementId: String, val lockDate: Instant)
 
-    fun makeUrl(index: String, type: String) = "$url/$index/$type"
-    fun makeUrl(type: String) = makeUrl(STATE_INDEX, type)
-    inline fun <reified T : Any> mapFromSource(response: String): T = JSON.readTree(response).get("_source").traverse().let { JSON.readValue<T>(it) }!!
-
     private fun ttlKillOldLocks() {
-        val (delCode, response) = http.post("${makeUrl("lock")}/_delete_by_query?refresh",
+        val response = esClient.indexTypePOST(STATE_INDEX, "lock", "/_delete_by_query?refresh",
                 """
                        { "query": { "range": { "lockDate": { "lt": "now-15m" } } } }
                     """)
-        if (!delCode.isSuccess()) throw DataImportException("State manager failed, TTL delete query for locks failed\n$response")
+        if (!response.isSuccess) throw DataImportException("State manager failed, TTL delete query for locks failed\n${response.responseJson}")
     }
 
     override fun lockStatement(runId: String, statement: EsImportStatement): Boolean {
-        val lockUrl = "${makeUrl("lock")}/${statement.stateKey()}"
-        val (code, response) = http.post("$lockUrl?op_type=create", JSON.writeValueAsString(Lock(runId, statement.indexName, statement.id, Instant.now())))
+        val response = esClient.indexTypeIdPOST(STATE_INDEX, "lock", statement.stateKey(), "?op_type=create",
+                JSON.writeValueAsString(Lock(runId, statement.indexName, statement.id, Instant.now())))
 
-        if (!code.isSuccess()) {
+        if (!response.isSuccess) {
             ttlKillOldLocks()
             return pingLockStatement(runId, statement)
         }
@@ -168,13 +107,12 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
     }
 
     override fun pingLockStatement(runId: String, statement: EsImportStatement): Boolean {
-        val lockUrl = "${makeUrl("lock")}/${statement.stateKey()}"
-        val (getCode, response) = http.get(lockUrl)
-        if (getCode.isSuccess()) {
-            val lock = mapFromSource<Lock>(response)
+        val response = esClient.indexTypeIdGET(STATE_INDEX, "lock", statement.stateKey())
+        if (response.isSuccess) {
+            val lock = esClient.mapFromSource<Lock>(response.responseJson)
             if (lock.runId == runId) {
                 // TODO: we did a get, so have the version, change to a update with version ID
-                val (updCode, updResponse) = http.post("${makeUrl("lock")}/_update_by_query?refresh", """
+                val updResponse = esClient.indexTypePOST(STATE_INDEX, "lock", "/_update_by_query?refresh", """
                     {
                         "script": {
                             "inline": "ctx._source.lockDate = Instant.ofEpochMilli(${Instant.now().toEpochMilli()}L)",
@@ -191,11 +129,11 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
                         }
                     }
                 """)
-                if (!updCode.isSuccess()) {
-                    throw DataImportException("State manager failed, cannot acquire lock for ${statement.stateKey()} - had conflict on pinging of lock\n$updResponse")
+                if (!updResponse.isSuccess) {
+                    throw DataImportException("State manager failed, cannot acquire lock for ${statement.stateKey()} - had conflict on pinging of lock\n${updResponse.responseJson}")
                 }
             } else {
-                throw DataImportException("State manager failed, cannot acquire lock for ${statement.stateKey()} -- it is held by ${lock.runId} since ${lock.lockDate.toIsoString()}\n$response")
+                throw DataImportException("State manager failed, cannot acquire lock for ${statement.stateKey()} -- it is held by ${lock.runId} since ${lock.lockDate.toIsoString()}\n${response.responseJson}")
             }
         }
         return true
@@ -203,10 +141,9 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
 
     override fun unlockStatemnt(runId: String, statement: EsImportStatement) {
         if (pingLockStatement(runId, statement)) {
-            val lockUrl = "${makeUrl("lock")}/${statement.stateKey()}?refresh"
-            val (code, response) = http.delete(lockUrl)
-            if (!code.isSuccess()) {
-                throw DataImportException("State manager failed, cannot delete lock for ${statement.stateKey()}\n$response")
+            val response =  esClient.indexTypeIdDELETE(STATE_INDEX, "lock", statement.stateKey(), "?refresh")
+            if (!response.isSuccess) {
+                throw DataImportException("State manager failed, cannot delete lock for ${statement.stateKey()}\n${response.responseJson}")
             }
         }
     }
@@ -216,17 +153,17 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
     data class StateLog(val targetIndex: String, val statementId: String, val runId: String, val runDate: Instant, val status: String, val errorMsg: String?, val rowCount: Long)
 
     override fun writeStateForStatement(runId: String, statement: EsImportStatement, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String?) {
-        val (code, response) = http.post("${makeUrl("state")}/${statement.stateKey()}?refresh",
+        val response = esClient.indexTypeIdPOST(STATE_INDEX, "state", statement.stateKey(), "?refresh",
                 JSON.writeValueAsString(State(statement.indexName, statement.id, lastRunStart, status, runId, errMsg, lastRowCount)))
-        if (!code.isSuccess()) {
-            throw DataImportException("State manager failed, cannot update state for ${statement.stateKey()}\n$response")
+        if (!response.isSuccess) {
+            throw DataImportException("State manager failed, cannot update state for ${statement.stateKey()}\n${response.responseJson}")
         }
     }
 
     override fun readStateForStatement(runId: String, statement: EsImportStatement): Instant? {
-        val (code, response) = http.get("${makeUrl("state")}/${statement.stateKey()}")
-        if (code.isSuccess()) {
-            val state = mapFromSource<State>(response)
+        val response = esClient.indexTypeIdGET(STATE_INDEX, "state", statement.stateKey())
+        if (response.isSuccess) {
+            val state = esClient.mapFromSource<State>(response.responseJson)
             return state.lastRunDate
         } else {
             return null
@@ -234,10 +171,10 @@ class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : 
     }
 
     override fun logStatement(runId: String, statement: EsImportStatement, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String?) {
-        val (code, response) = http.post("${makeUrl("log")}/${statement.stateKey()}_run_${runId}?refresh",
+        val response = esClient.indexTypeIdPOST(STATE_INDEX, "log", "${statement.stateKey()}_run_${runId}", "?refresh",
                 JSON.writeValueAsString(StateLog(statement.indexName, statement.id, runId, lastRunStart, status, errMsg, rowCount)))
-        if (!code.isSuccess()) {
-            throw DataImportException("State manager failed, cannot log state for ${statement.stateKey()}\n$response")
+        if (!response.isSuccess) {
+            throw DataImportException("State manager failed, cannot log state for ${statement.stateKey()}\n${response.responseJson}")
         }
     }
 }

@@ -9,6 +9,7 @@ apply plugin: 'nebula.kotlin'
 apply plugin: 'nebula.resolution-rules'
 apply plugin: 'nebula.dependency-lock'
 apply plugin: 'nebula.facet'
+apply plugin: 'java'
 apply plugin: 'idea'
 
 apply plugin: 'application'
@@ -41,7 +42,7 @@ dependencies {
     runtime group: 'ch.qos.logback', name: 'logback-classic', version: version_logback
 
     compile group: 'mysql', name: 'mysql-connector-java', version: version_jdbc_mysql
-    compile group: 'org.postgresql', name: 'postgresql', version: 'version_jdbc_postresql'
+    compile group: 'org.postgresql', name: 'postgresql', version: version_jdbc_postresql
 
     testCompile group: 'junit', name: 'junit', version: version_junit
     testCompile  group: 'org.jetbrains.kotlin', name: 'kotlin-test-junit'

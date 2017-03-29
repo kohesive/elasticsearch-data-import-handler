@@ -369,9 +369,9 @@ The Data Import Handler also defines some UDF functions for use within SQL:
 
 |Function|Description|Since Version|
 |-------|-----------|--------------|
-|stripHtml(string)|Removes all HTML tags and returns only the text (including unescaping of HTML Entities)|0.6.0-ALPHA|
-|unescapeHtmlEntites(string)|Unescapes HTML entities found in the text|0.6.0-ALPHA|
-|fluffly(string)|A silly function that prepends the word "fluffly" to the text, used as a *test* function to mark values as being changed by processing|0.6.0-ALPHA|
+|stripHtml(string)|Removes all HTML tags and returns only the text (including unescaping of HTML Entities)|`0.6.0-ALPHA`|
+|unescapeHtmlEntites(string)|Unescapes HTML entities found in the text|`0.6.0-ALPHA`|
+|fluffly(string)|A silly function that prepends the word "fluffly" to the text, used as a *test* function to mark values as being changed by processing|`0.6.0-ALPHA`|
 
 ### State Management and History:
 

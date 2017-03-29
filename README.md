@@ -367,7 +367,7 @@ is available in raw API docs.  (_TODO: find better reference_)
 
 The Data Import Handler also defines some UDF functions for use within SQL:
 
-|Function|Description|Since Version|
+|Function|Description|Since&nbsp;Version|
 |-------|-----------|--------------|
 |stripHtml(string)|Removes all HTML tags and returns only the text (including unescaping of HTML Entities)|`0.6.0-ALPHA`|
 |unescapeHtmlEntites(string)|Unescapes HTML entities found in the text|`0.6.0-ALPHA`|

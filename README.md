@@ -379,6 +379,47 @@ The Data Import Handler also defines some UDF functions for use within SQL:
 |unescapeHtmlEntites(string)|Unescapes HTML entities found in the text|`0.6.0-ALPHA`|
 |fluffly(string)|A silly function that prepends the word "fluffly" to the text, used as a *test* function to mark values as being changed by processing|`0.6.0-ALPHA`|
 
+### Auth and HTTPS for Elasticsearch
+
+(_Since version `0.8.0-ALPHA`_)
+
+For basic AUTH with Elasticsearch you can add the following to the source or target Elasticsearch definitions:
+
+```hocon
+    "basicAuth": {
+        "username": "elastic",
+        "password": "changeme"
+    }
+```
+
+And for SSL, enable it within the Elasticsearch definition as well:
+
+```hocon
+   "enableSsl": true
+```
+
+Here is a full example, when connection to Elastic Cloud instance:
+
+```hocon
+"targetElasticsearch": {
+    "nodes": [
+      "123myinstance456.us-east-1.aws.found.io"
+    ],
+    "basicAuth": {
+        "username": "elastic",
+        "password": "changeme"
+    },
+    "port": 9243,
+    "enableSsl": true,
+    "settings": {
+      "es.index.auto.create": true,
+      "es.nodes.wan.only": true
+    }
+}
+```
+
+Note the use of the `es.nodes.wan.only` setting to use the external host names for the cluster members, and not internal AWS addresses.
+
 ### State Management and History:
 
 State for the `lastRun` value is per-statement and stored in the target Elasticsearch cluster for that statement.  An index

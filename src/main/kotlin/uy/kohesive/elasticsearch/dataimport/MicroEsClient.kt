@@ -1,17 +1,21 @@
 package uy.kohesive.elasticsearch.dataimport
 
 import com.fasterxml.jackson.module.kotlin.readValue
-import okhttp3.MediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody
+import okhttp3.*
+import okhttp3.internal.http.HttpHeaders
 
 /**
  * TODO:  Change to use RestClient from ES / Spark integration
  */
-class MicroEsClient(nodes: List<String>, auth: AuthInfo?) {
-    val http = OkHttpClient()
-    val url = if (auth != null) "http://${auth.username}:${auth.password}@${nodes.first()}" else "http://${nodes.first()}"
+
+class MicroEsClient(nodes: List<String>, port: Int = 9200, enableSsl: Boolean = false, auth: AuthInfo? = null) {
+    val http = OkHttpClient().newBuilder().apply {
+        auth?.let { addInterceptor(BasicAuthInterceptor(it)) }
+    }.build()
+    val protocol = if (enableSsl) "https" else "http"
+    val host = nodes.first()
+    val hostWithPort = if (':' in host.substringAfter('@', host)) host else "${host}:${port}"
+    val url = "${protocol}://${hostWithPort}"
 
     fun String.fixRestAppendage(): String {
         if (this.startsWith("?")) return this
@@ -111,5 +115,13 @@ class MicroEsClient(nodes: List<String>, auth: AuthInfo?) {
 
     data class CallResponse(val code: Int, val responseJson: String) {
         val isSuccess: Boolean get() = code in 200..299
+    }
+}
+
+class BasicAuthInterceptor(val authInfo: AuthInfo) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        val requestWithAuth = request.newBuilder().header("Authorization", Credentials.basic(authInfo.username, authInfo.password)).build()
+        return chain.proceed(requestWithAuth)
     }
 }

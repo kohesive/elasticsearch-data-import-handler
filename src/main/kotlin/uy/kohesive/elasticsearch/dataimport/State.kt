@@ -26,9 +26,9 @@ private fun EsImportStatement.stateKey(): String = this.indexName + "-" + this.i
 
 // TODO: better state management
 // This is NOT using the ES client because we do not want conflicts with Spark dependencies
-class ElasticSearchStateManager(val nodes: List<String>, val auth: AuthInfo?) : StateManager {
+class ElasticSearchStateManager(val nodes: List<String>, val port: Int = 9200, val enableSsl: Boolean = false, val auth: AuthInfo?) : StateManager {
     val STATE_INDEX = ".kohesive-dih-state-v2"
-    val esClient = MicroEsClient(nodes, auth)
+    val esClient = MicroEsClient(nodes, port, enableSsl, auth)
 
     override fun init() {
         if (esClient.checkIndexExists(STATE_INDEX)) {

@@ -14,6 +14,8 @@ data class Connections(val elasticsearch: List<EsConnection>?,
 
 data class EsConnection(val nodes: List<String>,
                         val basicAuth: AuthInfo? = null,
+                        val port: Int? = 9200,
+                        val enableSsl: Boolean? = false,
                         val tables: List<EsSource>,
                         val settings: Map<String, String>? = null) {
 }
@@ -45,6 +47,8 @@ data class PrepStatement(val description: String, val sqlQuery: String)
 data class Importer(val description: String, val targetElasticsearch: EsTargetConnection, val statements: List<EsImportStatement>)
 data class EsTargetConnection(val nodes: List<String>,
                               val basicAuth: AuthInfo? = null,
+                              val port: Int? = 9200,
+                              val enableSsl: Boolean? = false,
                               val settings: Map<String, String>? = null) {
 
 }

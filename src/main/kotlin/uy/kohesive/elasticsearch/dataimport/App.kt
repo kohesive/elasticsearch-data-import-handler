@@ -37,7 +37,7 @@ class App {
             }
 
             try {
-                App().run(configFile!!.inputStream(), configFile)
+                App().run(configFile!!.inputStream(), configFile.parentFile)
             } catch (ex: Throwable) {
                 System.err.println("Data import failed due to:")
                 System.err.println(ex.message)
@@ -64,7 +64,8 @@ class App {
 
         println("Connecting to target ES clusters to check state...")
         val stateMap: Map<String, StateManager> = cfg.importSteps.map { importStep ->
-            val mgr = ElasticSearchStateManager(importStep.targetElasticsearch.nodes, importStep.targetElasticsearch.basicAuth)
+            val mgr = ElasticSearchStateManager(importStep.targetElasticsearch.nodes, importStep.targetElasticsearch.port ?: 9200,
+                    importStep.targetElasticsearch.enableSsl ?: false, importStep.targetElasticsearch.basicAuth)
             mgr.init()
             importStep.statements.map { statement ->
                 statement.id to mgr
@@ -176,6 +177,13 @@ class App {
                             options.put("es.net.http.auth.user", it.username)
                             options.put("es.net.http.auth.pass", it.password)
                         }
+                        es.port?.let {
+                            options.put("es.port", it.toString())
+                        }
+                        es.enableSsl?.let {
+                            options.put("es.net.ssl", it.toString())
+                        }
+
                         es.settings?.let { options.putAll(it) }
                         table.settings?.let { options.putAll(it) }
 
@@ -238,7 +246,7 @@ class App {
                         println("\n    Execute statement:  ($dateMsg)\n${statement.description.replaceIndent("        ")}")
 
                         if (!stateMgr.lockStatement(uniqueId, statement)) {
-                            System.err.println("        Cannot aquire lock for statement ${statement.id}")
+                            System.err.println("        Cannot acquire lock for statement ${statement.id}")
                         } else {
                             try {
                                 // look for table create setting
@@ -248,11 +256,20 @@ class App {
                                     options.put("es.net.http.auth.user", it.username)
                                     options.put("es.net.http.auth.pass", it.password)
                                 }
+                                import.targetElasticsearch.port?.let { port ->
+                                    options.put("es.port", port.toString())
+                                }
+                                import.targetElasticsearch.enableSsl?.let { enableSsl ->
+                                    options.put("es.net.ssl", enableSsl.toString())
+                                }
                                 import.targetElasticsearch.settings?.let { options.putAll(it) }
                                 statement.settings?.let { options.putAll(it) }
 
                                 val autocreate: Boolean = options.getOrDefault("es.index.auto.create", "true").toBoolean()
-                                val esClient = MicroEsClient(import.targetElasticsearch.nodes, import.targetElasticsearch.basicAuth)
+                                val esClient = MicroEsClient(import.targetElasticsearch.nodes,
+                                        import.targetElasticsearch.port ?: 9200,
+                                        import.targetElasticsearch.enableSsl ?: false,
+                                        import.targetElasticsearch.basicAuth)
                                 val indexExists = esClient.checkIndexExists(statement.indexName)
                                 if (!autocreate) {
                                     if (!indexExists) {

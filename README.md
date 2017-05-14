@@ -120,6 +120,9 @@ Notice that the SQL statement includes the use of the `{lastRun}` and `{thisRun}
 date/time into the SQL as a SQL Date formated string.  The granularity is SECONDS, and the local time zone of the data 
 import processor is used.  Also, be sure to put the date macros inside quotes.
 
+(_Since version `0.9.0-ALPHA`_) SQL statements can also be provided in a file, using `sqlFile` instead of `sqlQuery`, 
+where the file path is relative to the configuration file.
+
 The `indexType` field is the target type within the Elasticsearch `indexName` for the documents.  You can use either the 
 literal type name, or include a macro of `{fieldName}` where `fieldName` is one of the fields in the SQL result set.  
 
@@ -297,39 +300,42 @@ you use the `{lastRun}` and `{thisRun}` values.
           "settings": {
             "es.mapping.id": "guid"
           },
-          "sqlQuery": """
-                WITH
-                    orgMembers AS
-                    (
-                       SELECT our.guid AS roleOrgGuid, our.userGuid AS roleUserGuid, our.orgUserRoleType AS roleType, our.dtUpdated AS dtRoleUpdated,
-                              oe.displayName AS orgDisplayName, oe.dtUpdated AS dtOrgUpdated
-                         FROM ActiveOrgs AS oe JOIN OrgMembers AS our ON (our.orgGuid = oe.guid)
-                    ),
-                    userWithOrg AS (
-                       SELECT ue.guid, struct(ue.*) AS user, struct(om.*) AS orgMembership
-                         FROM ActiveUsers AS ue LEFT OUTER JOIN orgMembers AS om ON (om.roleUserGuid = ue.guid)
-                    ),
-                    modifiedUserData AS (
-                        SELECT guid, first(user) as user, collect_list(orgMembership) AS orgMemberships
-                                 FROM userWithOrg AS ue
-                                WHERE user.dtUpdated between "{lastRun}" AND "{thisRun}" OR
-                                      orgMembership.dtRoleUpdated between  "{lastRun}" AND "{thisRun}" OR
-                                      orgMembership.dtOrgUpdated between  "{lastRun}" AND "{thisRun}"
-                             GROUP BY guid
-                    ),
-                    usersWithEmotions AS (
-                        SELECT mu.*, em.emotion FROM modifiedUserData AS mu LEFT OUTER JOIN UserEmotions AS em ON (mu.guid = em.guid)
-                    )
-                    SELECT user.accountType as docType, user.guid,
-                           user.identity, user.displayName, user.contactEmail, user.avatarUrl, user.gravatarEmail, user.blurb,
-                           user.location, user.defaultTraitPrivacyType, user.companyName, user.isActive, user.isHeadless,
-                           emotion, user.dtCreated, user.dtUpdated, orgMemberships FROM usersWithEmotions
-          """
+          "sqlFile": "structured-user-load.sql"
         }
       ]
     }
   ]
 }
+```
+
+and the `structured-user-load.sql` file placed in the same directory:
+
+```sql
+WITH orgMembers AS
+(
+   SELECT our.guid AS roleOrgGuid, our.userGuid AS roleUserGuid, our.orgUserRoleType AS roleType, our.dtUpdated AS dtRoleUpdated,
+          oe.displayName AS orgDisplayName, oe.dtUpdated AS dtOrgUpdated
+     FROM ActiveOrgs AS oe JOIN OrgMembers AS our ON (our.orgGuid = oe.guid)
+),
+userWithOrg AS (
+   SELECT ue.guid, struct(ue.*) AS user, struct(om.*) AS orgMembership
+     FROM ActiveUsers AS ue LEFT OUTER JOIN orgMembers AS om ON (om.roleUserGuid = ue.guid)
+),
+modifiedUserData AS (
+    SELECT guid, first(user) as user, collect_list(orgMembership) AS orgMemberships
+             FROM userWithOrg AS ue
+            WHERE user.dtUpdated between "{lastRun}" AND "{thisRun}" OR
+                  orgMembership.dtRoleUpdated between  "{lastRun}" AND "{thisRun}" OR
+                  orgMembership.dtOrgUpdated between  "{lastRun}" AND "{thisRun}"
+         GROUP BY guid
+),
+usersWithEmotions AS (
+    SELECT mu.*, em.emotion FROM modifiedUserData AS mu LEFT OUTER JOIN UserEmotions AS em ON (mu.guid = em.guid)
+)
+SELECT user.accountType as docType, user.guid,
+       user.identity, user.displayName, user.contactEmail, user.avatarUrl, user.gravatarEmail, user.blurb,
+       user.location, user.defaultTraitPrivacyType, user.companyName, user.isActive, user.isHeadless,
+       emotion, user.dtCreated, user.dtUpdated, orgMemberships FROM usersWithEmotions
 ```
 
 Ok, that was a bit much.  But here is some research you can do.  In the [SQL Functions API Reference](https://spark.apache.org/docs/2.1.0/api/java/org/apache/spark/sql/functions.html) 
@@ -448,7 +454,26 @@ connecting to a Spark cluster using the setting.  It just might work!
 ### Memory Issues
 
 If you run out of memory you can set the Java VM parameters via the `KOHESIVE_ES_DIH_OPTS` environment variable before
-running the `kohesive-es-dih` script.  For example, to set it to 2G: `-Xmx2g` 
+running the `kohesive-es-dih` script.  For example, to set it to 2G: `-Xmx2g`   
+
+For Spark driver and executor memory settings (_Since version `0.9.0-ALPHA`_), you can add Spark Configuration settings 
+in `sparkConfig` map, for example:
+
+```
+{
+    "sparkMaster": "local[4]",
+    "sparkConfig": {
+       "spark.driver.memory": "300mb",
+       "spark.executor.memory": "512mb"
+    },
+    "sources": { 
+        # ... 
+    } 
+}
+```
+
+Note that `spark.executor.memory` has a minimum allowed value that you cannot go below, and you will receive an error if
+it is set to low or the JVM does not have enough memory.
 
 ### TODOs
 

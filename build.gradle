@@ -1,8 +1,8 @@
 plugins {
-    id 'nebula.kotlin' version '1.1.1' apply false
+    id 'nebula.kotlin' version '1.1.2' apply false
     id 'nebula.facet' version '3.3.0' apply false
-    id 'nebula.dependency-lock' version '4.5.1' apply false
-    id 'nebula.resolution-rules' version '2.4.2' apply false
+    id 'nebula.dependency-lock' version '4.9.4' apply false
+    id 'nebula.resolution-rules' version '2.5.10' apply false
 }
 
 apply plugin: 'nebula.kotlin'
@@ -73,4 +73,11 @@ task wrapper(type: Wrapper) {
 
 tasks.withType(Tar){
     compression = Compression.GZIP
+}
+
+idea {
+    module {
+        downloadJavadoc = true
+        downloadSources = true
+    }
 }

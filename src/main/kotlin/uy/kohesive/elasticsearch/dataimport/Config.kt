@@ -4,7 +4,8 @@ package uy.kohesive.elasticsearch.dataimport
 data class EsDataImportHandlerConfig(val sparkMaster: String? = null,
                                      val sources: Connections,
                                      val prepStatements: List<PrepStatement>? = null,
-                                     val importSteps: List<Importer>)
+                                     val importSteps: List<Importer>,
+                                     val sparkConfig: Map<String, String>? = null)
 
 data class AuthInfo(val username: String, val password: String)
 
@@ -42,7 +43,7 @@ data class FileSource(val sparkTable: String, val format: String, val filespecs:
 data class EsSource(val sparkTable: String, val indexName: String, val type: String?, val indexType: String?, val esQuery: Any? = null,
                     val settings: Map<String, String>? = null)
 
-data class PrepStatement(val description: String, val sqlQuery: String)
+data class PrepStatement(val description: String, val sqlQuery: String?, val sqlFile: String?)
 
 data class Importer(val description: String, val targetElasticsearch: EsTargetConnection, val statements: List<EsImportStatement>)
 data class EsTargetConnection(val nodes: List<String>,
@@ -57,6 +58,7 @@ data class EsImportStatement(val id: String, val description: String,
                              val indexName: String, val indexType: String?,
                              val type: String?,
                              val newIndexSettingsFile: String?,
-                             val sqlQuery: String,
+                             val sqlQuery: String?,
+                             val sqlFile: String?,
                              val settings: Map<String, String>? = null)
 

@@ -93,9 +93,30 @@ class App {
                 if (statement.type != null && statement.indexType == null) {
                     System.err.println("     Statement configuration parameter `type` is deprecated, use `indexType`")
                 }
+                if (statement.sqlQuery == null && statement.sqlFile == null) {
+                    throw IllegalArgumentException("The statement '${statement.id}' is missing one of `sqlQuery` or `sqlFile`")
+                }
+                if (statement.sqlQuery != null && statement.sqlFile != null) {
+                    throw IllegalArgumentException("The statement '${statement.id}' should have only one of `sqlQuery` or `sqlFile`")
+                }
+                if (statement.sqlFile != null && !fileRelativeToConfig(statement.sqlFile).exists()) {
+                    throw IllegalArgumentException("The statement '${statement.id}' `sqlFile` must exist")
+                }
                 statement.id to lastState
             }
         }.flatten().toMap()
+
+        cfg.prepStatements?.forEach { statement ->
+            if (statement.sqlQuery == null && statement.sqlFile == null) {
+                throw IllegalArgumentException("A prepStatement is missing one of `sqlQuery` or `sqlFile`")
+            }
+            if (statement.sqlQuery != null && statement.sqlFile != null) {
+                throw IllegalArgumentException("A prepStatement should have only one of `sqlQuery` or `sqlFile`")
+            }
+            if (statement.sqlFile != null && !fileRelativeToConfig(statement.sqlFile).exists()) {
+                throw IllegalArgumentException("A prepStatement `sqlFile` must exist:  ${statement.sqlFile}")
+            }
+        }
 
         val thisRunDate = Instant.now().truncatedTo(ChronoUnit.SECONDS)
 
@@ -108,6 +129,11 @@ class App {
             SparkSession.builder()
                     .appName("esDataImport-${uniqueId}")
                     .config("spark.ui.enabled", false)
+                    .apply {
+                        cfg.sparkConfig?.forEach {
+                            config(it.key,  it.value)
+                        }
+                    }
                     .master(sparkMaster).getOrCreate().use { spark ->
 
                 // add extra UDF functions
@@ -130,7 +156,7 @@ class App {
                         spark.read().format(table.format)
                                 .options(options)
                                 .load(*fileSpecs)
-                                .registerTempTable(table.sparkTable)
+                                .createOrReplaceTempView(table.sparkTable)
                     }
                 }
 
@@ -151,7 +177,7 @@ class App {
                         spark.read().format("jdbc")
                                 .options(options)
                                 .load()
-                                .registerTempTable(table.sparkTable)
+                                .createOrReplaceTempView(table.sparkTable)
                     }
                 }
 
@@ -202,7 +228,7 @@ class App {
                         spark.read().format("org.elasticsearch.spark.sql")
                                 .options(options)
                                 .load(indexSpec(table.indexName, indexType))
-                                .registerTempTable(table.sparkTable)
+                                .createOrReplaceTempView(table.sparkTable)
                     }
                 }
 
@@ -217,7 +243,8 @@ class App {
                 cfg.prepStatements?.forEach { statement ->
                     try {
                         println("\nRunning prep-statement:\n${statement.description.replaceIndent("  ")}")
-                        spark.sql(statement.sqlQuery)
+                        val rawQuery = statement.sqlQuery ?: fileRelativeToConfig(statement.sqlFile!!).readText()
+                        spark.sql(rawQuery)
                     } catch (ex: Throwable) {
                         val msg = ex.toNiceMessage()
                         throw DataImportException("Prep Statement: ${statement.description}\n$msg", ex)
@@ -291,7 +318,8 @@ class App {
                                     }
                                 }
 
-                                val subDataInQuery = statement.sqlQuery.replace("{lastRun}", sqlMinDate).replace("{thisRun}", sqlMaxDate)
+                                val rawQuery = statement.sqlQuery ?: fileRelativeToConfig(statement.sqlFile!!).readText()
+                                val subDataInQuery = rawQuery.replace("{lastRun}", sqlMinDate).replace("{thisRun}", sqlMaxDate)
                                 val sqlResults = try {
                                     spark.sql(subDataInQuery).cache()
                                 } catch (ex: Throwable) {

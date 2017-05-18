@@ -482,7 +482,7 @@ as usage of off-heap space can be defined as mentioned above in the Spark Config
 
 Prior to version 0.10.0-ALPHA all queries were cached into memory which could cause an overflow.  Now by default they
 are not cached.  For each statement (preperatory or import statements) you can specify these properties to control caching,
-otherwise no cache is performed.
+otherwise no caching is performed.
 
 ```
    "cache": true,
@@ -491,6 +491,10 @@ otherwise no cache is performed.
 
 Where the persist setting is one of the storage levels defined [in the RDD persistence guide](https://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence), and
 the default is `MEMORY_ONLY` which might overflow memory if not enough JVM or off-heap space is permitted.
+
+Note that caching helps with preparatory steps that are then used later, or to speed up the two step process
+of running the main import queries followed by counting the number of rows that the query caused to be imported.  But
+it is not required.
 
 
 ### NUMBER and DECIMAL Types Being Disallowed

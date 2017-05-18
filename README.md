@@ -8,6 +8,11 @@ A data import handler for Elasticsearch
 * Process full load and incremental updates
 * Output columnar and structured JSON to Elasticsearch
 
+**Note:** *This import handler is designed to use Spark SQL as the ETL layer which means currently all data for the
+current time segment is loaded into memory to be processed quickly, therefore the memory sizing of the process (or
+Spark cluster) must allow for this.  Soon, streaming options will be added allowing for lower memory requirements 
+when you are not doing ETL that requires the whole set to be in memory.*
+
 Running is simple.  With Java 8 installed, [download a release](https://github.com/kohesive/elasticsearch-data-import-handler/releases) and then run it:
 
 ```

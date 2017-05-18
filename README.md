@@ -475,6 +475,25 @@ in `sparkConfig` map, for example:
 Note that `spark.executor.memory` has a minimum allowed value that you cannot go below, and you will receive an error if
 it is set to low or the JVM does not have enough memory.
 
+### NUMBER and DECIMAL Types Being Disallowed
+
+If you have errors such as:
+
+> Decimal types are not supported by Elasticsearch
+
+This is an issue explained further by the Elasticsearch team in [ES-Hadoop #842](https://github.com/elastic/elasticsearch-hadoop/issues/842).
+
+Basically, they want to avoid precision loss during the SQL stage and instead let Elasticsearch use knowledge of the actual mappings later to do the conversion.
+So the recommendation is that you cast the type to a `String` type of decimal, or a `Integer` type if not and then let the conversion
+happen at the moment of indexing.
+
+This would look something like:
+
+```
+SELECT id, name, cast(somethingDecimal as String) AS somethingDecimal, dtCreated, dtUpdated
+   FROM myTable
+```
+
 ### TODOs
 
 **See:** [Issues](https://github.com/kohesive/elasticsearch-data-import-handler/issues) for TODO, feature requests, ideas and issues.

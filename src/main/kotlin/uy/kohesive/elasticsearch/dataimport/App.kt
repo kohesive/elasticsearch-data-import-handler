@@ -9,6 +9,7 @@ import com.typesafe.config.ConfigResolveOptions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.storage.StorageLevel
 import org.elasticsearch.spark.sql.api.java.JavaEsSparkSQL
 import java.io.File
 import java.io.InputStream
@@ -244,7 +245,18 @@ class App {
                     try {
                         println("\nRunning prep-statement:\n${statement.description.replaceIndent("  ")}")
                         val rawQuery = statement.sqlQuery ?: fileRelativeToConfig(statement.sqlFile!!).readText()
-                        spark.sql(rawQuery)
+                        spark.sql(rawQuery).let {
+                            if (statement.cache ?: false) {
+                                val storeLevel = statement.persist?.let { StorageLevel.fromString(it) }
+                                if (storeLevel != null) {
+                                    it.persist(storeLevel)
+                                } else {
+                                    it.cache()
+                                }
+                            } else {
+                                it
+                            }
+                        }
                     } catch (ex: Throwable) {
                         val msg = ex.toNiceMessage()
                         throw DataImportException("Prep Statement: ${statement.description}\n$msg", ex)
@@ -321,7 +333,18 @@ class App {
                                 val rawQuery = statement.sqlQuery ?: fileRelativeToConfig(statement.sqlFile!!).readText()
                                 val subDataInQuery = rawQuery.replace("{lastRun}", sqlMinDate).replace("{thisRun}", sqlMaxDate)
                                 val sqlResults = try {
-                                    spark.sql(subDataInQuery).cache()
+                                    spark.sql(subDataInQuery).let {
+                                        if (statement.cache ?: false) {
+                                            val storeLevel = statement.persist?.let { StorageLevel.fromString(it) }
+                                            if (storeLevel != null) {
+                                                it.persist(storeLevel)
+                                            } else {
+                                                it.cache()
+                                            }
+                                        } else {
+                                            it
+                                        }
+                                    }
                                 } catch (ex: Throwable) {
                                     val msg = ex.toNiceMessage()
                                     throw DataImportException(msg, ex)

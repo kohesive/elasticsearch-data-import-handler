@@ -43,7 +43,7 @@ data class FileSource(val sparkTable: String, val format: String, val filespecs:
 data class EsSource(val sparkTable: String, val indexName: String, val type: String?, val indexType: String?, val esQuery: Any? = null,
                     val settings: Map<String, String>? = null)
 
-data class PrepStatement(val description: String, val sqlQuery: String?, val sqlFile: String?)
+data class PrepStatement(val description: String, val sqlQuery: String?, val sqlFile: String?, val cache: Boolean? = null, val persist: String? = "MEMORY_ONLY")
 
 data class Importer(val description: String, val targetElasticsearch: EsTargetConnection, val statements: List<EsImportStatement>)
 data class EsTargetConnection(val nodes: List<String>,
@@ -60,5 +60,7 @@ data class EsImportStatement(val id: String, val description: String,
                              val newIndexSettingsFile: String?,
                              val sqlQuery: String?,
                              val sqlFile: String?,
+                             val cache: Boolean? = null,
+                             val persist: String? = "MEMORY_ONLY",
                              val settings: Map<String, String>? = null)
 

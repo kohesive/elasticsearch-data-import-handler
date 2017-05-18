@@ -8,11 +8,6 @@ A data import handler for Elasticsearch
 * Process full load and incremental updates
 * Output columnar and structured JSON to Elasticsearch
 
-**Note:** *This import handler is designed to use Spark SQL as the ETL layer which means currently all data for the
-current time segment is loaded into memory to be processed quickly, therefore the memory sizing of the process (or
-Spark cluster) must allow for this.  Soon, streaming options will be added allowing for lower memory requirements 
-when you are not doing ETL that requires the whole set to be in memory.*
-
 Running is simple.  With Java 8 installed, [download a release](https://github.com/kohesive/elasticsearch-data-import-handler/releases) and then run it:
 
 ```
@@ -479,6 +474,24 @@ in `sparkConfig` map, for example:
 
 Note that `spark.executor.memory` has a minimum allowed value that you cannot go below, and you will receive an error if
 it is set to low or the JVM does not have enough memory.
+
+[Other Spark memory configuration settings](https://spark.apache.org/docs/latest/configuration.html#memory-management) such 
+as usage of off-heap space can be defined as mentioned above in the Spark Configuration settings.
+
+*Query Caching:*
+
+Prior to version 0.10.0-ALPHA all queries were cached into memory which could cause an overflow.  Now by default they
+are not cached.  For each statement (preperatory or import statements) you can specify these properties to control caching,
+otherwise no cache is performed.
+
+```
+   "cache": true,
+   "persist": "MEMORY_AND_DISK_SER"
+```
+
+Where the persist setting is one of the storage levels defined [in the RDD persistence guide](https://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence), and
+the default is `MEMORY_ONLY` which might overflow memory if not enough JVM or off-heap space is permitted.
+
 
 ### NUMBER and DECIMAL Types Being Disallowed
 

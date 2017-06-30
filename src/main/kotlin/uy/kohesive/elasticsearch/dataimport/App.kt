@@ -53,7 +53,7 @@ class App {
     fun run(configInput: InputStream, configRelativeDir: File) {
         val hoconCfg = ConfigFactory.parseReader(InputStreamReader(configInput)).resolve(ConfigResolveOptions.noSystem())
         val jsonCfg = hoconCfg.root().render(ConfigRenderOptions.concise().setJson(true))
-        val cfg = jacksonObjectMapper().readValue<EsDataImportHandlerConfig>(jsonCfg)
+        val cfg = jacksonObjectMapper().readValue<DataImportHandlerConfig>(jsonCfg)
 
         val uniqueId = UUID.randomUUID().toString()
 
@@ -63,11 +63,26 @@ class App {
             return configRelativeDir.resolve(filename).canonicalFile
         }
 
-        println("Connecting to target ES clusters to check state...")
+        println("Connecting to target ES/Algolia to check state...")
         val stateMap: Map<String, StateManager> = cfg.importSteps.map { importStep ->
-            val mgr = ElasticSearchStateManager(importStep.targetElasticsearch.nodes, importStep.targetElasticsearch.port ?: 9200,
-                    importStep.targetElasticsearch.enableSsl ?: false, importStep.targetElasticsearch.basicAuth)
+            val mgr = if (importStep.targetElasticsearch != null) {
+                ElasticSearchStateManager(
+                    nodes     = importStep.targetElasticsearch.nodes,
+                    port      = importStep.targetElasticsearch.port ?: 9200,
+                    enableSsl = importStep.targetElasticsearch.enableSsl ?: false,
+                    auth      = importStep.targetElasticsearch.basicAuth
+                )
+            } else if (importStep.targetAlgolia != null) {
+                AlgoliaStateManager(
+                    applicationId = importStep.targetAlgolia.applicationId,
+                    apiKey        = importStep.targetAlgolia.apiKey
+                )
+            } else {
+                throw IllegalStateException(importStep.description + " import step neither declares ES nor Algolia target")
+            }
+
             mgr.init()
+
             importStep.statements.map { statement ->
                 statement.id to mgr
             }
@@ -75,34 +90,38 @@ class App {
 
         val NOSTATE = LocalDateTime.of(1900, 1, 1, 0, 0, 0, 0).atZone(ZoneOffset.UTC).toInstant()
 
+        fun DataImportStatement.validate() {
+            // do a little validation of the ..
+            if (newIndexSettingsFile != null) {
+                val checkFile = fileRelativeToConfig(newIndexSettingsFile)
+                if (!checkFile.exists()) {
+                    throw IllegalStateException("The statement '${id}' new-index mapping file must exist: $checkFile")
+                }
+            }
+            if (indexType == null && type == null) {
+                throw IllegalArgumentException("The statement '${id}' is missing `indexType`")
+            }
+            if (type != null && indexType == null) {
+                System.err.println("     Statement configuration parameter `type` is deprecated, use `indexType`")
+            }
+            if (sqlQuery == null && sqlFile == null) {
+                throw IllegalArgumentException("The statement '${id}' is missing one of `sqlQuery` or `sqlFile`")
+            }
+            if (sqlQuery != null && sqlFile != null) {
+                throw IllegalArgumentException("The statement '${id}' should have only one of `sqlQuery` or `sqlFile`")
+            }
+            if (sqlFile != null && !fileRelativeToConfig(sqlFile).exists()) {
+                throw IllegalArgumentException("The statement '${id}' `sqlFile` must exist")
+            }
+        }
+        
         val lastRuns: Map<String, Instant> = cfg.importSteps.map { importStep ->
             importStep.statements.map { statement ->
                 val lastState = stateMap.get(statement.id)!!.readStateForStatement(uniqueId, statement)?.truncatedTo(ChronoUnit.SECONDS) ?: NOSTATE
                 println("  Statement ${statement.id} - ${statement.description}")
                 println("     LAST RUN: ${if (lastState == NOSTATE) "never" else lastState.toIsoString()}")
 
-                // do a little validation of the statement...
-                if (statement.newIndexSettingsFile != null) {
-                    val checkFile = fileRelativeToConfig(statement.newIndexSettingsFile)
-                    if (!checkFile.exists()) {
-                        throw IllegalStateException("The statement '${statement.id}' new-index mapping file must exist: $checkFile")
-                    }
-                }
-                if (statement.indexType == null && statement.type == null) {
-                    throw IllegalArgumentException("The statement '${statement.id}' is missing `indexType`")
-                }
-                if (statement.type != null && statement.indexType == null) {
-                    System.err.println("     Statement configuration parameter `type` is deprecated, use `indexType`")
-                }
-                if (statement.sqlQuery == null && statement.sqlFile == null) {
-                    throw IllegalArgumentException("The statement '${statement.id}' is missing one of `sqlQuery` or `sqlFile`")
-                }
-                if (statement.sqlQuery != null && statement.sqlFile != null) {
-                    throw IllegalArgumentException("The statement '${statement.id}' should have only one of `sqlQuery` or `sqlFile`")
-                }
-                if (statement.sqlFile != null && !fileRelativeToConfig(statement.sqlFile).exists()) {
-                    throw IllegalArgumentException("The statement '${statement.id}' `sqlFile` must exist")
-                }
+                statement.validate()
                 statement.id to lastState
             }
         }.flatten().toMap()
@@ -289,26 +308,26 @@ class App {
                         } else {
                             try {
                                 // look for table create setting
-
-                                val options = mutableMapOf("es.nodes" to import.targetElasticsearch.nodes.joinToString(","))
-                                import.targetElasticsearch.basicAuth?.let {
+                                val targetElasticsearch = import.targetElasticsearch!!
+                                val options = mutableMapOf("es.nodes" to targetElasticsearch.nodes.joinToString(","))
+                                targetElasticsearch.basicAuth?.let {
                                     options.put("es.net.http.auth.user", it.username)
                                     options.put("es.net.http.auth.pass", it.password)
                                 }
-                                import.targetElasticsearch.port?.let { port ->
+                                targetElasticsearch.port?.let { port ->
                                     options.put("es.port", port.toString())
                                 }
-                                import.targetElasticsearch.enableSsl?.let { enableSsl ->
+                                targetElasticsearch.enableSsl?.let { enableSsl ->
                                     options.put("es.net.ssl", enableSsl.toString())
                                 }
-                                import.targetElasticsearch.settings?.let { options.putAll(it) }
+                                targetElasticsearch.settings?.let { options.putAll(it) }
                                 statement.settings?.let { options.putAll(it) }
 
                                 val autocreate: Boolean = options.getOrDefault("es.index.auto.create", "true").toBoolean()
-                                val esClient = MicroEsClient(import.targetElasticsearch.nodes,
-                                        import.targetElasticsearch.port ?: 9200,
-                                        import.targetElasticsearch.enableSsl ?: false,
-                                        import.targetElasticsearch.basicAuth)
+                                val esClient = MicroEsClient(targetElasticsearch.nodes,
+                                        targetElasticsearch.port ?: 9200,
+                                        targetElasticsearch.enableSsl ?: false,
+                                        targetElasticsearch.basicAuth)
                                 val indexExists = esClient.checkIndexExists(statement.indexName)
                                 if (!autocreate) {
                                     if (!indexExists) {
@@ -355,7 +374,7 @@ class App {
                                 println("        Rows processed: $rowCount")
 
                                 stateMgr.writeStateForStatement(uniqueId, statement, thisRunDate, "success", rowCount, null)
-                                stateMgr.logStatement(uniqueId, statement, thisRunDate, "sucess", rowCount, null)
+                                stateMgr.logStatement(uniqueId, statement, thisRunDate, "success", rowCount, null)
                             } catch (ex: Throwable) {
                                 val msg = ex.message ?: "unknown failure"
                                 stateMgr.writeStateForStatement(uniqueId, statement, lastRun, "error", 0, msg)
@@ -363,7 +382,7 @@ class App {
                                 // System.err.println("\nProcess FAILED:  \n$msg\n")
                                 throw ex
                             } finally {
-                                stateMgr.unlockStatemnt(uniqueId, statement)
+                                stateMgr.unlockStatement(uniqueId, statement)
                             }
                         }
                     }

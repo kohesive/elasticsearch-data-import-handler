@@ -37,6 +37,8 @@ dependencies {
 
     compile group: 'org.jsoup', name: 'jsoup', version: version_jsoup
 
+    compile group: 'com.algolia', name: 'algoliasearch', version: version_algolia
+
     resolutionRules group: 'com.netflix.nebula', name: 'gradle-resolution-rules', version: version_nebula_resolution
     resolutionRules files("${rootDir}/gradle-local-dependency-rules.json")
 

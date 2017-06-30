@@ -1,11 +1,11 @@
 package uy.kohesive.elasticsearch.dataimport
 
 
-data class EsDataImportHandlerConfig(val sparkMaster: String? = null,
-                                     val sources: Connections,
-                                     val prepStatements: List<PrepStatement>? = null,
-                                     val importSteps: List<Importer>,
-                                     val sparkConfig: Map<String, String>? = null)
+data class DataImportHandlerConfig(val sparkMaster: String? = null,
+                                   val sources: Connections,
+                                   val prepStatements: List<PrepStatement>? = null,
+                                   val importSteps: List<Importer>,
+                                   val sparkConfig: Map<String, String>? = null)
 
 data class AuthInfo(val username: String, val password: String)
 
@@ -45,22 +45,28 @@ data class EsSource(val sparkTable: String, val indexName: String, val type: Str
 
 data class PrepStatement(val description: String, val sqlQuery: String?, val sqlFile: String?, val cache: Boolean? = null, val persist: String? = "MEMORY_ONLY")
 
-data class Importer(val description: String, val targetElasticsearch: EsTargetConnection, val statements: List<EsImportStatement>)
+data class Importer(val description: String,
+                    val targetElasticsearch: EsTargetConnection?,
+                    val targetAlgolia: AlgoliaTargetConnection?,
+                    val statements: List<DataImportStatement>)
+
+data class AlgoliaTargetConnection(val applicationId: String, val apiKey: String)
+
 data class EsTargetConnection(val nodes: List<String>,
                               val basicAuth: AuthInfo? = null,
                               val port: Int? = 9200,
                               val enableSsl: Boolean? = false,
-                              val settings: Map<String, String>? = null) {
+                              val settings: Map<String, String>? = null)
 
-}
-
-data class EsImportStatement(val id: String, val description: String,
-                             val indexName: String, val indexType: String?,
-                             val type: String?,
-                             val newIndexSettingsFile: String?,
-                             val sqlQuery: String?,
-                             val sqlFile: String?,
-                             val cache: Boolean? = null,
-                             val persist: String? = "MEMORY_ONLY",
-                             val settings: Map<String, String>? = null)
+data class DataImportStatement(val id: String,
+                               val description: String,
+                               val indexName: String,
+                               val indexType: String?,
+                               val type: String?,
+                               val newIndexSettingsFile: String?,
+                               val sqlQuery: String?,
+                               val sqlFile: String?,
+                               val cache: Boolean? = null,
+                               val persist: String? = "MEMORY_ONLY",
+                               val settings: Map<String, String>? = null)
 

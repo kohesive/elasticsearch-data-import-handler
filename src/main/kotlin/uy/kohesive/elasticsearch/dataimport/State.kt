@@ -12,38 +12,7 @@ interface StateManager {
     fun logStatement(runId: String, statement: DataImportStatement, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String? = null)
 }
 
-private fun DataImportStatement.stateKey(): String = this.indexName + "-" + this.id
-
-// TODO: implement
-class AlgoliaStateManager(val applicationId: String, apiKey: String) : StateManager {
-    override fun init() {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-    override fun lockStatement(runId: String, statement: DataImportStatement): Boolean {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-    override fun pingLockStatement(runId: String, statement: DataImportStatement): Boolean {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-    override fun unlockStatement(runId: String, statement: DataImportStatement) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-    override fun writeStateForStatement(runId: String, statement: DataImportStatement, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-    override fun readStateForStatement(runId: String, statement: DataImportStatement): Instant? {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-    override fun logStatement(runId: String, statement: DataImportStatement, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-}
+fun DataImportStatement.stateKey(): String = this.indexName + "-" + this.id
 
 // TODO: better state management
 // This is NOT using the ES client because we do not want conflicts with Spark dependencies

@@ -1,5 +1,7 @@
 package uy.kohesive.elasticsearch.dataimport
 
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.Row
 import java.io.File
 
 interface StatementDataImportHandler {
@@ -13,7 +15,7 @@ interface StatementDataImportHandler {
     /**
      * Returns processed rows count.
      */
-    fun import(): Long
+    fun import(dataSet: Dataset<Row>): Long
 
     fun fileRelativeToConfig(filename: String): File = configRelativeDir.resolve(filename).canonicalFile
 

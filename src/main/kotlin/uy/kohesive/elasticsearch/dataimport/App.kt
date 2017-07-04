@@ -272,11 +272,11 @@ class App {
                     println()
                 }
 
-                fun Importer.getDataImportHandler(statement: DataImportStatement, sqlMinDate: String, sqlMaxDate: String, spark: SparkSession): StatementDataImportHandler {
+                fun Importer.getDataImportHandler(statement: DataImportStatement): StatementDataImportHandler {
                     return if (targetElasticsearch != null) {
-                        EsDataImportHandler(statement, configRelativeDir, sqlMinDate, sqlMaxDate, spark, targetElasticsearch)
+                        EsDataImportHandler(statement, configRelativeDir, targetElasticsearch)
                     } else if (targetAlgolia != null) {
-                        AlgoliaDataImportHandler(statement, configRelativeDir, sqlMinDate, sqlMaxDate, spark, targetAlgolia)
+                        AlgoliaDataImportHandler(statement, configRelativeDir, targetAlgolia)
                     } else {
                         throw IllegalStateException(description + " import step neither declares ES nor Algolia target")
                     }
@@ -306,10 +306,30 @@ class App {
                             System.err.println("        Cannot acquire lock for statement ${statement.id}")
                         } else {
                             try {
-                                val importHandler = import.getDataImportHandler(statement, sqlMinDate, sqlMaxDate, spark)
+                                val importHandler = import.getDataImportHandler(statement)
                                 importHandler.prepareIndex()
 
-                                val rowCount = importHandler.import()
+                                val rawQuery       = statement.sqlQuery ?: fileRelativeToConfig(statement.sqlFile!!).readText()
+                                val subDataInQuery = rawQuery.replace("{lastRun}", sqlMinDate).replace("{thisRun}", sqlMaxDate)
+                                val sqlResults     = try {
+                                    spark.sql(subDataInQuery).let {
+                                        if (statement.cache ?: false) {
+                                            val storeLevel = statement.persist?.let { StorageLevel.fromString(it) }
+                                            if (storeLevel != null) {
+                                                it.persist(storeLevel)
+                                            } else {
+                                                it.cache()
+                                            }
+                                        } else {
+                                            it
+                                        }
+                                    }
+                                } catch (ex: Throwable) {
+                                    val msg = ex.toNiceMessage()
+                                    throw DataImportException(msg, ex)
+                                }
+
+                                val rowCount = importHandler.import(sqlResults)
                                 println("        Rows processed: $rowCount")
 
                                 stateMgr.writeStateForStatement(uniqueId, statement, thisRunDate, "success", rowCount, null)

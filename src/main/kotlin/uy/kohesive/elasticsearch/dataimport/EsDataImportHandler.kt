@@ -1,17 +1,13 @@
 package uy.kohesive.elasticsearch.dataimport
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.Row
 import org.elasticsearch.spark.sql.api.java.JavaEsSparkSQL
 import java.io.File
 
 class EsDataImportHandler(
     override val statement: DataImportStatement,
     override val configRelativeDir: File,
-
-    val sqlMinDate: String,
-    val sqlMaxDate: String,
-    val spark: SparkSession,
 
     targetElasticsearch: EsTargetConnection
 ) : StatementDataImportHandler {
@@ -40,29 +36,9 @@ class EsDataImportHandler(
         targetElasticsearch.basicAuth
     )
 
-    override fun import(): Long {
-        val rawQuery = statement.sqlQuery ?: fileRelativeToConfig(statement.sqlFile!!).readText()
-        val subDataInQuery = rawQuery.replace("{lastRun}", sqlMinDate).replace("{thisRun}", sqlMaxDate)
-        val sqlResults = try {
-            spark.sql(subDataInQuery).let {
-                if (statement.cache ?: false) {
-                    val storeLevel = statement.persist?.let { StorageLevel.fromString(it) }
-                    if (storeLevel != null) {
-                        it.persist(storeLevel)
-                    } else {
-                        it.cache()
-                    }
-                } else {
-                    it
-                }
-            }
-        } catch (ex: Throwable) {
-            val msg = ex.toNiceMessage()
-            throw DataImportException(msg, ex)
-        }
-
-        JavaEsSparkSQL.saveToEs(sqlResults, indexSpec(statement.indexName, statement.indexType ?: statement.type), options)
-        return sqlResults.count()
+    override fun import(dataSet: Dataset<Row>): Long {
+        JavaEsSparkSQL.saveToEs(dataSet, indexSpec(statement.indexName, statement.indexType ?: statement.type), options)
+        return dataSet.count()
     }
 
     override fun prepareIndex() {

@@ -25,9 +25,10 @@ class AlgoliaDataImportHandler(
     targetAlgolia: AlgoliaTargetConnection
 ) : StatementDataImportHandler {
 
-    val options = mutableMapOf(
+    val options = mapOf(
         "algolia.write.applicationid" to targetAlgolia.applicationId,
         "algolia.write.apikey"        to targetAlgolia.apiKey,
+        "algolia.write.idfield"       to statement.idField,
         "algolia.write.index"         to statement.indexName
     )
 
@@ -43,7 +44,7 @@ class AlgoliaDataImportHandler(
 
 object AlgoliaSparkSQL {
 
-    fun saveToAlgolia(ds: Dataset<Row>, cfg: Map<String, String>) {
+    fun saveToAlgolia(ds: Dataset<Row>, cfg: Map<String, String?>) {
         val sparkCtx = ds.sqlContext().sparkContext()
         val sparkCfg = SparkSettingsManager().load(sparkCtx.conf)
 
@@ -79,6 +80,8 @@ class AlgoliaDataFrameWriter(val schema: StructType, serializedSettings: String)
 
     private val bulkSize = settings.getProperty("algolia.write.bulkSize")?.toInt() ?: DefaultBulkSize
 
+    private val idField: String? = settings.getProperty("algolia.write.idfield")
+
     private val algoliaClient: APIClient = ApacheAPIClientBuilder(
         settings.getProperty("algolia.write.applicationid"),
         settings.getProperty("algolia.write.apikey")
@@ -89,8 +92,19 @@ class AlgoliaDataFrameWriter(val schema: StructType, serializedSettings: String)
     private val buffer = ArrayList<String>()
 
     private fun flush() {
-        targetIndex.addObjects(buffer.map { JSON.readValue<Map<String, Any>>(it) })
-        buffer.clear()
+        val objectsToWrite = buffer.map { rowStr ->
+            JSON.readValue<Map<String, Any>>(rowStr).let { map ->
+                if (idField != null) {
+                    map + ("objectID" to map[idField])
+                } else {
+                    map
+                }
+            }
+        }
+        if (objectsToWrite.isNotEmpty()) {
+            targetIndex.addObjects(objectsToWrite)
+            buffer.clear()
+        }
     }
 
     fun write(taskContext: TaskContext, data: Iterator<Row>) {

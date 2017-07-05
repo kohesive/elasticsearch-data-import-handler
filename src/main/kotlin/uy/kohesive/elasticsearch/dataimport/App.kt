@@ -49,6 +49,11 @@ class App {
         }
     }
 
+    enum class ImportTarget {
+        ElasticSearch,
+        Algolia
+    }
+
     fun run(configInput: InputStream, configRelativeDir: File) {
         val hoconCfg = ConfigFactory.parseReader(InputStreamReader(configInput)).resolve(ConfigResolveOptions.noSystem())
         val jsonCfg  = hoconCfg.root().render(ConfigRenderOptions.concise().setJson(true))
@@ -89,7 +94,7 @@ class App {
 
         val NOSTATE = LocalDateTime.of(1900, 1, 1, 0, 0, 0, 0).atZone(ZoneOffset.UTC).toInstant()
 
-        fun DataImportStatement.validate() {
+        fun DataImportStatement.validate(importTarget: ImportTarget) {
             // do a little validation of the ..
             if (newIndexSettingsFile != null) {
                 val checkFile = fileRelativeToConfig(newIndexSettingsFile)
@@ -97,7 +102,7 @@ class App {
                     throw IllegalStateException("The statement '${id}' new-index mapping file must exist: $checkFile")
                 }
             }
-            if (indexType == null && type == null) {
+            if (importTarget == ImportTarget.ElasticSearch && indexType == null && type == null) {
                 throw IllegalArgumentException("The statement '${id}' is missing `indexType`")
             }
             if (type != null && indexType == null) {
@@ -115,12 +120,13 @@ class App {
         }
         
         val lastRuns: Map<String, Instant> = cfg.importSteps.map { importStep ->
+            val importTarget = if (importStep.targetElasticsearch != null) ImportTarget.ElasticSearch else ImportTarget.Algolia
             importStep.statements.map { statement ->
                 val lastState = stateMap.get(statement.id)!!.readStateForStatement(uniqueId, statement)?.truncatedTo(ChronoUnit.SECONDS) ?: NOSTATE
                 println("  Statement ${statement.id} - ${statement.description}")
                 println("     LAST RUN: ${if (lastState == NOSTATE) "never" else lastState.toIsoString()}")
 
-                statement.validate()
+                statement.validate(importTarget)
                 statement.id to lastState
             }
         }.flatten().toMap()

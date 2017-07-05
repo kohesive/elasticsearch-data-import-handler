@@ -5,10 +5,15 @@ import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StructType
 import org.elasticsearch.hadoop.cfg.PropertiesSettings
+import org.elasticsearch.hadoop.serialization.json.JacksonJsonGenerator
+import org.elasticsearch.hadoop.util.FastByteArrayOutputStream
 import org.elasticsearch.spark.cfg.SparkSettingsManager
+import org.elasticsearch.spark.sql.DataFrameValueWriter
+import scala.Tuple2
 import scala.collection.Iterator
 import scala.runtime.AbstractFunction2
 import java.io.File
+import java.io.Serializable
 
 class AlgoliaDataImportHandler(
     override val statement: DataImportStatement,
@@ -44,14 +49,18 @@ object AlgoliaSparkSQL {
 
         val rdd = ds.toDF().rdd()
 
-        sparkCtx.runJob<Row, Unit>(
+        val serializedSettings = algoliaCfg.save()
+        val schema = ds.schema()
+
+        sparkCtx.runJob<Row, Long>(
             rdd,
-            object : AbstractFunction2<TaskContext, Iterator<Row>, Unit>() {
-                override fun apply(taskContext: TaskContext, data: Iterator<Row>) {
-                    AlgoliaDataFrameWriter(ds.schema(), algoliaCfg.save()).write(taskContext, data)
+            object : AbstractFunction2<TaskContext, Iterator<Row>, Long>(), Serializable {
+                override fun apply(taskContext: TaskContext, data: Iterator<Row>): Long {
+                    AlgoliaDataFrameWriter(schema, serializedSettings).write(taskContext, data)
+                    return 0L
                 }
             },
-            scala.reflect.`ClassTag$`.`MODULE$`.apply<Unit>(Unit::class.java)
+            scala.reflect.`ClassTag$`.`MODULE$`.apply<Long>(Long::class.java)
         )
     }
 
@@ -61,6 +70,16 @@ class AlgoliaDataFrameWriter(val schema: StructType, val serializedSettings: Str
 
     fun write(taskContext: TaskContext, data: Iterator<Row>) {
         while (data.hasNext()) {
+            val row       = data.next()
+            val out       = FastByteArrayOutputStream()
+            val generator = JacksonJsonGenerator(out)
+
+            generator.use { generator ->
+                DataFrameValueWriter().write(Tuple2(row, schema), generator)
+            }
+
+            println("DataFrameValueWriter: ${out.toString()}")
+
             // TODO: implement
         }
     }

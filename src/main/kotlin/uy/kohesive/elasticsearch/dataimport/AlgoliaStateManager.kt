@@ -47,7 +47,7 @@ class AlgoliaStateManager(applicationId: String, apiKey: String) : StateManager 
     private lateinit var logIndex: Index<AlgoliaLog>
     private lateinit var lockIndex: Index<AlgoliaLock>
 
-    val algoliaClient: APIClient = ApacheAPIClientBuilder(applicationId, apiKey).build()
+    val algoliaClient: APIClient = ApacheAPIClientBuilder(applicationId, apiKey).setObjectMapper(JSON).build()
 
     override fun init() {
         fun <T> initIndex(indexName: String, clazz: Class<T>, settings: IndexSettings.() -> Unit): Index<T> {

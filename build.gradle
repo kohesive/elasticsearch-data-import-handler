@@ -37,7 +37,11 @@ dependencies {
 
     compile group: 'org.jsoup', name: 'jsoup', version: version_jsoup
 
-    compile group: 'com.algolia', name: 'algoliasearch', version: version_algolia
+    compile (group: 'com.algolia', name: 'algoliasearch', version: version_algolia) {
+        exclude group: 'com.fasterxml.jackson.module'
+        exclude group: 'com.fasterxml.jackson.datatype'
+        exclude group: 'com.fasterxml.jackson.core'
+    }
 
     resolutionRules group: 'com.netflix.nebula', name: 'gradle-resolution-rules', version: version_nebula_resolution
     resolutionRules files("${rootDir}/gradle-local-dependency-rules.json")

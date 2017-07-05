@@ -1,5 +1,8 @@
 package uy.kohesive.elasticsearch.dataimport
 
+import com.algolia.search.APIClient
+import com.algolia.search.ApacheAPIClientBuilder
+import com.fasterxml.jackson.module.kotlin.readValue
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.Row
@@ -66,9 +69,37 @@ object AlgoliaSparkSQL {
 
 }
 
-class AlgoliaDataFrameWriter(val schema: StructType, val serializedSettings: String) {
+class AlgoliaDataFrameWriter(val schema: StructType, serializedSettings: String) {
+
+    companion object {
+        val DefaultBulkSize = 50
+    }
+
+    private val settings = PropertiesSettings().load(serializedSettings)
+
+    private val bulkSize = settings.getProperty("algolia.write.bulkSize")?.toInt() ?: DefaultBulkSize
+
+    private val algoliaClient: APIClient = ApacheAPIClientBuilder(
+        settings.getProperty("algolia.write.applicationid"),
+        settings.getProperty("algolia.write.apikey")
+    ).setObjectMapper(JSON).build()
+
+    private val targetIndex = algoliaClient.initIndex(settings.getProperty("algolia.write.index"), Map::class.java)
+
+    private val buffer = ArrayList<String>()
+
+    private fun flush() {
+        targetIndex.addObjects(buffer.map { JSON.readValue<Map<String, Any>>(it) })
+        buffer.clear()
+    }
 
     fun write(taskContext: TaskContext, data: Iterator<Row>) {
+        fun tryFlush() {
+            if (buffer.size >= bulkSize) {
+                flush()
+            }
+        }
+
         while (data.hasNext()) {
             val row       = data.next()
             val out       = FastByteArrayOutputStream()
@@ -78,10 +109,11 @@ class AlgoliaDataFrameWriter(val schema: StructType, val serializedSettings: Str
                 DataFrameValueWriter().write(Tuple2(row, schema), generator)
             }
 
-            println("DataFrameValueWriter: ${out.toString()}")
-
-            // TODO: implement
+            buffer.add(out.toString())
+            tryFlush()
         }
+
+        flush()
     }
 
 }

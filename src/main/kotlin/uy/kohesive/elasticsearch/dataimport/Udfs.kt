@@ -1,10 +1,7 @@
 package uy.kohesive.elasticsearch.dataimport
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.DataTypes
 import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
-import org.jsoup.nodes.Entities
 import org.jsoup.parser.Parser
 import org.jsoup.safety.Whitelist
 import uy.kohesive.elasticsearch.dataimport.udf.Udfs
@@ -13,6 +10,7 @@ object DataImportHandlerUdfs {
     fun registerSparkUdfs(spark: SparkSession) {
         Udfs.registerStringToStringUdf(spark, "fluffly", fluffly)
         Udfs.registerStringToStringUdf(spark, "stripHtml", stripHtmlCompletely)
+        Udfs.registerStringToStringUdf(spark, "normalizeQuotes", normalizeQuotes)
         Udfs.registerStringToStringUdf(spark, "unescapeHtmlEntites", unescapeHtmlEntities)
     }
 
@@ -29,6 +27,10 @@ object DataImportHandlerUdfs {
 
     @JvmStatic val stripHtmlCompletely = fun (v: String): String {
         return Jsoup.parseBodyFragment(v).text()
+    }
+
+    @JvmStatic val normalizeQuotes = fun (v: String): String {
+        return v.replace("\\'", "'").replace("''", "\"")
     }
 
     @JvmStatic val unescapeHtmlEntities = fun (v: String): String {

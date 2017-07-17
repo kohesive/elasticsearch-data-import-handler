@@ -5,6 +5,8 @@ import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 import org.jsoup.safety.Whitelist
 import uy.kohesive.elasticsearch.dataimport.udf.Udfs
+import java.sql.Date
+import java.sql.Timestamp
 
 object DataImportHandlerUdfs {
     fun registerSparkUdfs(spark: SparkSession) {
@@ -12,6 +14,7 @@ object DataImportHandlerUdfs {
         Udfs.registerStringToStringUdf(spark, "stripHtml", stripHtmlCompletely)
         Udfs.registerStringToStringUdf(spark, "normalizeQuotes", normalizeQuotes)
         Udfs.registerStringToStringUdf(spark, "unescapeHtmlEntites", unescapeHtmlEntities)
+        Udfs.registerAnyAnyToTimestampUdf(spark, "combineDateTime", combineDateTime)
     }
 
     @JvmStatic val whiteListMap = mapOf(
@@ -35,6 +38,18 @@ object DataImportHandlerUdfs {
 
     @JvmStatic val unescapeHtmlEntities = fun (v: String): String {
         return Parser.unescapeEntities(v, false)
+    }
+
+    @JvmStatic val combineDateTime = fun (date: Date?, time: Timestamp?): Timestamp? {
+        // https://stackoverflow.com/questions/26649530/merge-date-and-time-into-timestamp
+        if (date == null || time == null) {
+            return null
+        }
+
+        val dd = date.time / 86400000L * 86400000L
+        val tt = time.time - time.time / 86400000L * 86400000L
+
+        return Timestamp(dd + tt)
     }
 
 }

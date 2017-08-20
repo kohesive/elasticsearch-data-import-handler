@@ -1,28 +1,18 @@
 package uy.kohesive.elasticsearch.dataimport
 
-import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.SerializationFeature
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
-import okhttp3.MediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody
 import java.time.Instant
 
 interface StateManager {
     fun init()
-    fun lockStatement(runId: String, statement: EsImportStatement): Boolean
-    fun pingLockStatement(runId: String, statement: EsImportStatement): Boolean
-    fun unlockStatemnt(runId: String, statement: EsImportStatement)
-    fun writeStateForStatement(runId: String, statement: EsImportStatement, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String? = null)
-    fun readStateForStatement(runId: String, statement: EsImportStatement): Instant?
-    fun logStatement(runId: String, statement: EsImportStatement, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String? = null)
+    fun lockStatement(runId: String, statement: DataImportStatement): Boolean
+    fun pingLockStatement(runId: String, statement: DataImportStatement): Boolean
+    fun unlockStatement(runId: String, statement: DataImportStatement)
+    fun writeStateForStatement(runId: String, statement: DataImportStatement, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String? = null)
+    fun readStateForStatement(runId: String, statement: DataImportStatement): Instant?
+    fun logStatement(runId: String, statement: DataImportStatement, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String? = null)
 }
 
-private fun EsImportStatement.stateKey(): String = this.indexName + "-" + this.id
+fun DataImportStatement.stateKey(): String = this.indexName + "-" + this.id
 
 // TODO: better state management
 // This is NOT using the ES client because we do not want conflicts with Spark dependencies
@@ -95,7 +85,7 @@ class ElasticSearchStateManager(val nodes: List<String>, val port: Int = 9200, v
         if (!response.isSuccess) throw DataImportException("State manager failed, TTL delete query for locks failed\n${response.responseJson}")
     }
 
-    override fun lockStatement(runId: String, statement: EsImportStatement): Boolean {
+    override fun lockStatement(runId: String, statement: DataImportStatement): Boolean {
         val response = esClient.indexTypeIdPOST(STATE_INDEX, "lock", statement.stateKey(), "?op_type=create",
                 JSON.writeValueAsString(Lock(runId, statement.indexName, statement.id, Instant.now())))
 
@@ -106,7 +96,7 @@ class ElasticSearchStateManager(val nodes: List<String>, val port: Int = 9200, v
         return true
     }
 
-    override fun pingLockStatement(runId: String, statement: EsImportStatement): Boolean {
+    override fun pingLockStatement(runId: String, statement: DataImportStatement): Boolean {
         val response = esClient.indexTypeIdGET(STATE_INDEX, "lock", statement.stateKey())
         if (response.isSuccess) {
             val lock = esClient.mapFromSource<Lock>(response.responseJson)
@@ -139,7 +129,7 @@ class ElasticSearchStateManager(val nodes: List<String>, val port: Int = 9200, v
         return true
     }
 
-    override fun unlockStatemnt(runId: String, statement: EsImportStatement) {
+    override fun unlockStatement(runId: String, statement: DataImportStatement) {
         if (pingLockStatement(runId, statement)) {
             val response =  esClient.indexTypeIdDELETE(STATE_INDEX, "lock", statement.stateKey(), "?refresh")
             if (!response.isSuccess) {
@@ -152,7 +142,7 @@ class ElasticSearchStateManager(val nodes: List<String>, val port: Int = 9200, v
 
     data class StateLog(val targetIndex: String, val statementId: String, val runId: String, val runDate: Instant, val status: String, val errorMsg: String?, val rowCount: Long)
 
-    override fun writeStateForStatement(runId: String, statement: EsImportStatement, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String?) {
+    override fun writeStateForStatement(runId: String, statement: DataImportStatement, lastRunStart: Instant, status: String, lastRowCount: Long, errMsg: String?) {
         val response = esClient.indexTypeIdPOST(STATE_INDEX, "state", statement.stateKey(), "?refresh",
                 JSON.writeValueAsString(State(statement.indexName, statement.id, lastRunStart, status, runId, errMsg, lastRowCount)))
         if (!response.isSuccess) {
@@ -160,7 +150,7 @@ class ElasticSearchStateManager(val nodes: List<String>, val port: Int = 9200, v
         }
     }
 
-    override fun readStateForStatement(runId: String, statement: EsImportStatement): Instant? {
+    override fun readStateForStatement(runId: String, statement: DataImportStatement): Instant? {
         val response = esClient.indexTypeIdGET(STATE_INDEX, "state", statement.stateKey())
         if (response.isSuccess) {
             val state = esClient.mapFromSource<State>(response.responseJson)
@@ -170,7 +160,7 @@ class ElasticSearchStateManager(val nodes: List<String>, val port: Int = 9200, v
         }
     }
 
-    override fun logStatement(runId: String, statement: EsImportStatement, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String?) {
+    override fun logStatement(runId: String, statement: DataImportStatement, lastRunStart: Instant, status: String, rowCount: Long, errMsg: String?) {
         val response = esClient.indexTypeIdPOST(STATE_INDEX, "log", "${statement.stateKey()}_run_${runId}", "?refresh",
                 JSON.writeValueAsString(StateLog(statement.indexName, statement.id, runId, lastRunStart, status, errMsg, rowCount)))
         if (!response.isSuccess) {

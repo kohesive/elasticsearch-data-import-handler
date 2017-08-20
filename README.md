@@ -1,12 +1,12 @@
-# Elasticsearch Data Import Handler
+# Elasticsearch/Algolia Data Import Handler
 
-A data import handler for Elasticsearch
+A data import handler for Elasticsearch/Algolia
 
 * Simple
 * Powerful
-* Use SQL statements that can span multiple databases, text files, and Elasticsearch indexes
+* Use SQL statements that can span multiple databases, text files, and ElasticSearch/Algolia indexes
 * Process full load and incremental updates
-* Output columnar and structured JSON to Elasticsearch
+* Output columnar and structured JSON to ElasticSearch/Algolia
 
 Running is simple.  With Java 8 installed, [download a release](https://github.com/kohesive/elasticsearch-data-import-handler/releases) and then run it:
 
@@ -367,6 +367,40 @@ So at the end we have a result that looks like:
      }
   ]
 }
+```
+
+### Algolia
+
+To define Algolia index as an import step target, configure the `targetAlgolia` inside your import step config like this:
+ 
+```
+"importSteps": [
+    {
+      "description": "Load products table into Algolia index",
+      "targetAlgolia": {
+        "applicationId": "YOURAPPID",
+        "apiKey": "yourapikey"
+      },
+      ...
+```
+
+The statement configuration is almost identical to the one of ElasticSearch: use `index` field to specify the Algolia index, and 
+the `idField` to specify the row that would be used as Algolia index's `objectID` (optional):
+ 
+```
+"statements": [
+  {
+    "id": "Import-Products-Table,
+    "description": "Load products data into Algolia index",
+    "idField": "product_id",
+    "indexName": "ProductsIndex",
+    "sqlQuery": """
+      SELECT id AS product_id, product_name, manufacturer_name FROM Products 
+      JOIN Manufacturers ON Products.manufacturer_id = Manufacturers.id
+      WHERE product_modify_date BETWEEN '{lastRun}' AND '{thisRun}'
+    """
+  }
+]
 ```
 
 ### SQL Reference:

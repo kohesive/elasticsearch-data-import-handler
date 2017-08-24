@@ -403,6 +403,25 @@ the `idField` to specify the row that would be used as Algolia index's `objectID
 ]
 ```
 
+Algolia target also supports "Delete" statements, which must return a column with a name defined by `idField` (see above),
+containing the `objectID`s to be deleted from Algolia index. To define such a statement, specify the `"action": "delete"` in its definition, e.g.:
+
+```
+"statements": [
+  {
+    "id": "Clear-Products-Table,
+    "description": "Delete previously removed products from Algolia index",
+    "idField": "product_id",
+    "indexName": "ProductsIndex",
+    "action": "delete",
+    "sqlQuery": """
+      SELECT product_id FROM DeletedProducts
+      WHERE product_delete_date BETWEEN '{lastRun}' AND '{thisRun}'
+    """
+  }
+]
+```
+
 ### SQL Reference:
 
 The data import handler uses Spark SQL, and you can read the [Spark SQL Reference](https://docs.databricks.com/spark/latest/spark-sql/index.html) 

@@ -63,11 +63,24 @@ data class DataImportStatement(val id: String,
                                val indexName: String,
                                val indexType: String?,
                                val type: String?,
+                               val action: String?,
                                val idField: String?,
                                val newIndexSettingsFile: String?,
                                val sqlQuery: String?,
                                val sqlFile: String?,
                                val cache: Boolean? = null,
                                val persist: String? = "MEMORY_ONLY",
-                               val settings: Map<String, String>? = null)
+                               val settings: Map<String, String>? = null) {
 
+    fun getAction(): StatementAction = if (action?.toLowerCase() == "delete") {
+        StatementAction.Delete
+    } else {
+        StatementAction.Index
+    }
+
+}
+
+enum class StatementAction {
+    Index,
+    Delete
+}

@@ -37,14 +37,14 @@ class AlgoliaDataImportHandler(
     }
 
     override fun import(dataSet: Dataset<Row>): Long {
-        AlgoliaSparkSQL.saveToAlgolia(dataSet, options)
+        AlgoliaSparkTaskRunner.runInSpark(dataSet, options, statement.getAction())
         return dataSet.count()
     }
 }
 
-object AlgoliaSparkSQL {
+object AlgoliaSparkTaskRunner {
 
-    fun saveToAlgolia(ds: Dataset<Row>, cfg: Map<String, String?>) {
+    fun runInSpark(ds: Dataset<Row>, cfg: Map<String, String?>, action: StatementAction) {
         val sparkCtx = ds.sqlContext().sparkContext()
         val sparkCfg = SparkSettingsManager().load(sparkCtx.conf)
 
@@ -60,7 +60,11 @@ object AlgoliaSparkSQL {
             rdd,
             object : AbstractFunction2<TaskContext, Iterator<Row>, Long>(), Serializable {
                 override fun apply(taskContext: TaskContext, data: Iterator<Row>): Long {
-                    AlgoliaDataFrameWriter(schema, serializedSettings).write(taskContext, data)
+                    val task = when (action) {
+                        StatementAction.Index  -> AlgoliaDataFrameWriter(schema, serializedSettings)
+                        StatementAction.Delete -> AlgoliaObjectsDeleteTask(schema, serializedSettings)
+                    }
+                    task.write(taskContext, data)
                     return 0L
                 }
             },
@@ -70,29 +74,29 @@ object AlgoliaSparkSQL {
 
 }
 
-class AlgoliaDataFrameWriter(val schema: StructType, serializedSettings: String) {
+abstract class AlgoliaDataFrameBufferedTask(val schema: StructType, serializedSettings: String) {
 
     companion object {
         val DefaultBulkSize = 50
     }
 
-    private val settings = PropertiesSettings().load(serializedSettings)
+    protected val settings = PropertiesSettings().load(serializedSettings)
 
-    private val bulkSize = settings.getProperty("algolia.write.bulkSize")?.toInt() ?: DefaultBulkSize
+    protected val bulkSize = settings.getProperty("algolia.write.bulkSize")?.toInt() ?: DefaultBulkSize
 
-    private val idField: String? = settings.getProperty("algolia.write.idfield")
+    protected val idField: String? = settings.getProperty("algolia.write.idfield")
 
-    private val algoliaClient: APIClient = ApacheAPIClientBuilder(
+    protected val algoliaClient: APIClient = ApacheAPIClientBuilder(
         settings.getProperty("algolia.write.applicationid"),
         settings.getProperty("algolia.write.apikey")
     ).setObjectMapper(JSON).build()
 
-    private val targetIndex = algoliaClient.initIndex(settings.getProperty("algolia.write.index"), Map::class.java)
+    protected val targetIndex = algoliaClient.initIndex(settings.getProperty("algolia.write.index"), Map::class.java)
 
-    private val buffer = ArrayList<String>()
+    protected val buffer = ArrayList<String>()
 
     private fun flush() {
-        val objectsToWrite = buffer.map { rowStr ->
+        val objectsToWrite: List<Map<String, Any?>> = buffer.map { rowStr ->
             JSON.readValue<Map<String, Any>>(rowStr).let { map ->
                 if (idField != null) {
                     map + ("objectID" to map[idField])
@@ -102,10 +106,12 @@ class AlgoliaDataFrameWriter(val schema: StructType, serializedSettings: String)
             }
         }
         if (objectsToWrite.isNotEmpty()) {
-            targetIndex.addObjects(objectsToWrite)
+            flush(objectsToWrite)
             buffer.clear()
         }
     }
+
+    abstract fun flush(objects: List<Map<String, Any?>>)
 
     fun write(taskContext: TaskContext, data: Iterator<Row>) {
         fun tryFlush() {
@@ -131,3 +137,23 @@ class AlgoliaDataFrameWriter(val schema: StructType, serializedSettings: String)
     }
 
 }
+
+class AlgoliaDataFrameWriter(schema: StructType, serializedSettings: String) : AlgoliaDataFrameBufferedTask(schema, serializedSettings) {
+
+    override fun flush(objects: List<Map<String, Any?>>) {
+        targetIndex.addObjects(objects)
+    }
+
+}
+
+class AlgoliaObjectsDeleteTask(schema: StructType, serializedSettings: String) : AlgoliaDataFrameBufferedTask(schema, serializedSettings) {
+
+    override fun flush(objects: List<Map<String, Any?>>) {
+        if (idField == null) {
+            throw IllegalStateException("Delete statement must have `idField` defined")
+        }
+        targetIndex.deleteObjects(objects.map { it[idField] as? String }.filterNotNull())
+    }
+
+}
+

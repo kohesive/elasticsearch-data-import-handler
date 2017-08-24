@@ -37,36 +37,41 @@ class AlgoliaDataImportHandler(
     }
 
     override fun import(dataSet: Dataset<Row>): Long {
-        val sparkCtx = dataSet.sqlContext().sparkContext()
+        AlgoliaSparkTaskRunner.runInSpark(dataSet, options, statement.getAction())
+        return dataSet.count()
+    }
+}
+
+object AlgoliaSparkTaskRunner {
+
+    fun runInSpark(ds: Dataset<Row>, cfg: Map<String, String?>, action: StatementAction) {
+        val sparkCtx = ds.sqlContext().sparkContext()
         val sparkCfg = SparkSettingsManager().load(sparkCtx.conf)
 
         val algoliaCfg = PropertiesSettings().load(sparkCfg.save())
-        algoliaCfg.merge(options)
+        algoliaCfg.merge(cfg)
 
-        val rdd = dataSet.toDF().rdd()
+        val rdd = ds.toDF().rdd()
 
         val serializedSettings = algoliaCfg.save()
-        val schema = dataSet.schema()
+        val schema = ds.schema()
 
         sparkCtx.runJob<Row, Long>(
             rdd,
             object : AbstractFunction2<TaskContext, Iterator<Row>, Long>(), Serializable {
                 override fun apply(taskContext: TaskContext, data: Iterator<Row>): Long {
-                    val task = when (statement.getAction()) {
+                    val task = when (action) {
                         StatementAction.Index  -> AlgoliaDataFrameWriter(schema, serializedSettings)
                         StatementAction.Delete -> AlgoliaObjectsDeleteTask(schema, serializedSettings)
                     }
-
                     task.write(taskContext, data)
-
                     return 0L
                 }
             },
             scala.reflect.`ClassTag$`.`MODULE$`.apply<Long>(Long::class.java)
         )
-
-        return dataSet.count()
     }
+
 }
 
 abstract class AlgoliaDataFrameBufferedTask(val schema: StructType, serializedSettings: String) {

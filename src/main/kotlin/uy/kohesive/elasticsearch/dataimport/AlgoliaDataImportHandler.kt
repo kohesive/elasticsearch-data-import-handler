@@ -23,7 +23,7 @@ class AlgoliaDataImportHandler(
     override val configRelativeDir: File,
 
     targetAlgolia: AlgoliaTargetConnection
-) : StatementDataImportHandler {
+) : StatementDataImportHandler, Serializable {
 
     val options = mapOf(
         "algolia.write.applicationid" to targetAlgolia.applicationId,

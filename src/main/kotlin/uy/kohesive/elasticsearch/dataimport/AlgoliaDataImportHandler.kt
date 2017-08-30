@@ -152,7 +152,7 @@ class AlgoliaObjectsDeleteTask(schema: StructType, serializedSettings: String) :
         if (idField == null) {
             throw IllegalStateException("Delete statement must have `idField` defined")
         }
-        targetIndex.deleteObjects(objects.map { it[idField] as? String }.filterNotNull())
+        targetIndex.deleteObjects(objects.map { it[idField]?.toString() }.filterNotNull())
     }
 
 }

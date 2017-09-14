@@ -46,10 +46,11 @@ object DataImportHandlerUdfs {
             return null
         }
 
-        val dd = date.time / 86400000L * 86400000L
-        val tt = time.time - time.time / 86400000L * 86400000L
+//        val dd = (date.time / 86400000L * 86400000L) - date.timezoneOffset * 60000
+//        val tt = time.time - time.time / 86400000L * 86400000L
+//        return Timestamp(dd + tt)
 
-        return Timestamp(dd + tt)
+        return Timestamp(date.year, date.month, date.date, time.hours, time.minutes, time.seconds, 0)
     }
 
 }

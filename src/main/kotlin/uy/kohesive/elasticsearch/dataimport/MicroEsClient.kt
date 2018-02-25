@@ -2,7 +2,6 @@ package uy.kohesive.elasticsearch.dataimport
 
 import com.fasterxml.jackson.module.kotlin.readValue
 import okhttp3.*
-import okhttp3.internal.http.HttpHeaders
 
 /**
  * TODO:  Change to use RestClient from ES / Spark integration
@@ -30,13 +29,13 @@ class MicroEsClient(nodes: List<String>, port: Int = 9200, enableSsl: Boolean = 
     private fun OkHttpClient.get(url: String): CallResponse {
         val request = Request.Builder().url(url).build()
         val response = http.newCall(request).execute()
-        return CallResponse(response.code(), response.use { it.body().string() })
+        return CallResponse(response.code(), response.use { it.body()?.string() ?: "" })
     }
 
     private fun OkHttpClient.delete(url: String): CallResponse {
         val request = Request.Builder().url(url).delete().build()
         val response = http.newCall(request).execute()
-        return CallResponse(response.code(), response.use { it.body().string() })
+        return CallResponse(response.code(), response.use { it.body()?.string() ?: "" })
     }
 
     private fun OkHttpClient.delete(url: String, jsonBody: String): CallResponse {
@@ -44,7 +43,7 @@ class MicroEsClient(nodes: List<String>, port: Int = 9200, enableSsl: Boolean = 
         val body = RequestBody.create(jsonMediaType, jsonBody)
         val request = Request.Builder().url(url).delete(body).build()
         val response = http.newCall(request).execute()
-        return CallResponse(response.code(), response.use { it.body().string() })
+        return CallResponse(response.code(), response.use { it.body()?.string() ?: "" })
     }
 
     private fun OkHttpClient.post(url: String, jsonBody: String): CallResponse {
@@ -52,7 +51,7 @@ class MicroEsClient(nodes: List<String>, port: Int = 9200, enableSsl: Boolean = 
         val body = RequestBody.create(jsonMediaType, jsonBody)
         val request = Request.Builder().url(url).post(body).build()
         val response = http.newCall(request).execute()
-        return CallResponse(response.code(), response.use { it.body().string() })
+        return CallResponse(response.code(), response.use { it.body()?.string() ?: "" })
     }
 
     private fun OkHttpClient.put(url: String, jsonBody: String): CallResponse {
@@ -60,7 +59,7 @@ class MicroEsClient(nodes: List<String>, port: Int = 9200, enableSsl: Boolean = 
         val body = RequestBody.create(jsonMediaType, jsonBody)
         val request = Request.Builder().url(url).put(body).build()
         val response = http.newCall(request).execute()
-        return CallResponse(response.code(), response.use { it.body().string() })
+        return CallResponse(response.code(), response.use { it.body()?.string() ?: "" })
     }
 
     fun indexTypePOST(indexName: String, indexType: String, restOfUrl: String, postJson: String): CallResponse {

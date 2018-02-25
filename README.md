@@ -1,3 +1,7 @@
+[![GitHub release](https://img.shields.io/github/release/kohesive/elasticsearch-data-import-handler.svg)](https://github.com/kohesive/elasticsearch-data-import-handler/releases)  [![CircleCI branch](https://img.shields.io/circleci/project/kohesive/elasticsearch-data-import-handler/master.svg)](https://circleci.com/gh/kohesive/elasticsearch-data-import-handler/tree/master) [![License](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://github.com/kohesive/elasticsearch-data-import-handler/blob/master/LICENSE)  [![ES](https://img.shields.io/badge/ES-5.x-orange.svg)](https://github.com/elastic/elasticsearch) [![ES](https://img.shields.io/badge/ES-6.x-orange.svg)](https://github.com/elastic/elasticsearch) 
+
+
+# Elasticsearch Data Import Handler
 # Elasticsearch/Algolia Data Import Handler
 
 A data import handler for Elasticsearch/Algolia

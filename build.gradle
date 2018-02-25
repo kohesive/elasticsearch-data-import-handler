@@ -1,14 +1,10 @@
 plugins {
-    id 'nebula.kotlin' version '1.1.2' apply false
-    id 'nebula.facet' version '3.3.0' apply false
-    id 'nebula.dependency-lock' version '4.9.4' apply false
-    id 'nebula.resolution-rules' version '2.5.10' apply false
+    id 'nebula.kotlin' version '1.1.61' apply false
+    id 'nebula.resolution-rules' version '5.1.1' apply false
 }
 
 apply plugin: 'nebula.kotlin'
 apply plugin: 'nebula.resolution-rules'
-apply plugin: 'nebula.dependency-lock'
-apply plugin: 'nebula.facet'
 apply plugin: 'java'
 apply plugin: 'idea'
 
@@ -21,10 +17,10 @@ sourceCompatibility = JavaVersion.VERSION_1_8
 targetCompatibility = JavaVersion.VERSION_1_8
 
 dependencies {
-    compile group: 'org.jetbrains.kotlin', name: 'kotlin-stdlib-jre8'
-    compile group: 'org.jetbrains.kotlin', name: 'kotlin-reflect'
+    compile group: 'org.jetbrains.kotlin', name: 'kotlin-stdlib-jre8', version: version_kotlin
+    compile group: 'org.jetbrains.kotlin', name: 'kotlin-reflect', version: version_kotlin
 
-    compile group: 'com.fasterxml.jackson.module', name: 'jackson-module-kotlin', version: version_jackson_compatible_with_spark
+    compile group: 'com.fasterxml.jackson.module', name: 'jackson-module-kotlin', version: version_jackson_kotlin_module
     compile group: 'com.fasterxml.jackson.datatype', name: 'jackson-datatype-jdk8', version: version_jackson_compatible_with_spark
     compile group: 'com.fasterxml.jackson.datatype', name: 'jackson-datatype-jsr310', version: version_jackson_compatible_with_spark
 
@@ -33,7 +29,7 @@ dependencies {
     compile group: 'org.elasticsearch', name: "elasticsearch-spark-20_${version_scala}", version: version_elasticsearch
     compile group: 'com.squareup.okhttp3', name: 'okhttp', version: version_okhttp
 
-    compile group: 'org.apache.spark', name: "spark-sql_${version_scala}", version: '2.1.0'
+    compile group: 'org.apache.spark', name: "spark-sql_${version_scala}", version: version_spark
 
     compile group: 'org.jsoup', name: 'jsoup', version: version_jsoup
 
@@ -54,6 +50,7 @@ dependencies {
 
     testCompile group: 'junit', name: 'junit', version: version_junit
     testCompile  group: 'org.jetbrains.kotlin', name: 'kotlin-test-junit'
+
 }
 
 nebulaResolutionRules {
@@ -62,9 +59,6 @@ nebulaResolutionRules {
 
 repositories {
     mavenCentral()
-    maven {
-        url "http://dl.bintray.com/kotlin/kotlin-eap-1.1"
-    }
 }
 
 compileKotlin {

@@ -576,3 +576,10 @@ SELECT id, name, cast(somethingDecimal as String) AS somethingDecimal, dtCreated
 ### TODOs
 
 **See:** [Issues](https://github.com/kohesive/elasticsearch-data-import-handler/issues) for TODO, feature requests, ideas and issues.
+
+## Special Thanks
+
+YourKit supports open source projects with its full-featured Java Profiler.
+YourKit, LLC is the creator of [YourKit Java Profiler](https://www.yourkit.com/java/profiler/)
+and [YourKit .NET Profiler](https://www.yourkit.com/.net/profiler/),
+innovative and intelligent tools for profiling Java and .NET applications.
